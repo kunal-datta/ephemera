@@ -320,6 +320,7 @@ struct OnboardingView: View {
         modelContext.insert(profile)
         
         // Save life context if provided
+        var contextToSave: UserContext?
         if !lifeContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let context = UserContext(
                 userId: profile.id,
@@ -328,6 +329,7 @@ struct OnboardingView: View {
                 response: lifeContext.trimmingCharacters(in: .whitespacesAndNewlines)
             )
             modelContext.insert(context)
+            contextToSave = context
         }
         
         // Save to Firestore
@@ -335,6 +337,12 @@ struct OnboardingView: View {
             do {
                 try await FirestoreService.shared.saveUserProfile(profile)
                 print("✅ Profile saved to both SwiftData and Firestore")
+                
+                // Also save context to Firestore if provided
+                if let context = contextToSave {
+                    try await FirestoreService.shared.saveUserContext(context)
+                    print("✅ Context saved to Firestore")
+                }
             } catch {
                 print("❌ Failed to save to Firestore: \(error.localizedDescription)")
                 // Profile is still saved locally, so we continue

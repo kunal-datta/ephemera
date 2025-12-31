@@ -243,6 +243,97 @@ class FirestoreService {
         return chart
     }
     
+    // MARK: - User Context
+    
+    /// Saves a user context entry to Firestore (append-only, time-series)
+    /// Each entry is immutable once created — this is a journal/timeline
+    func saveUserContext(_ context: UserContext) async throws {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            throw FirestoreError.notAuthenticated
+        }
+        
+        var data: [String: Any] = [
+            "id": context.id.uuidString,
+            "userId": context.userId.uuidString,
+            "promptType": context.promptType,
+            "question": context.question,
+            "response": context.response,
+            "createdAt": Timestamp(date: context.createdAt)
+        ]
+        
+        // Optional fields
+        if let mood = context.mood {
+            data["mood"] = mood
+        }
+        if let relatedReadingId = context.relatedReadingId {
+            data["relatedReadingId"] = relatedReadingId.uuidString
+        }
+        if let tags = context.tags {
+            data["tags"] = tags
+        }
+        
+        try await db.collection("users").document(userId).collection("contexts").document(context.id.uuidString).setData(data)
+        print("✅ User context saved to Firestore for userId: \(userId) at \(context.createdAt)")
+    }
+    
+    /// Fetches all user context entries from Firestore
+    func fetchAllUserContexts() async throws -> [UserContext] {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            throw FirestoreError.notAuthenticated
+        }
+        
+        let snapshot = try await db.collection("users").document(userId).collection("contexts")
+            .order(by: "createdAt", descending: false)
+            .getDocuments()
+        
+        return snapshot.documents.compactMap { parseUserContext(from: $0.data()) }
+    }
+    
+    /// Deletes all user contexts for the current user
+    func deleteAllUserContexts() async throws {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            throw FirestoreError.notAuthenticated
+        }
+        
+        let snapshot = try await db.collection("users").document(userId).collection("contexts").getDocuments()
+        
+        for document in snapshot.documents {
+            try await document.reference.delete()
+        }
+        
+        print("✅ All user contexts deleted from Firestore for userId: \(userId)")
+    }
+    
+    private func parseUserContext(from data: [String: Any]) -> UserContext? {
+        guard let idString = data["id"] as? String,
+              let id = UUID(uuidString: idString),
+              let userIdString = data["userId"] as? String,
+              let userId = UUID(uuidString: userIdString),
+              let promptType = data["promptType"] as? String,
+              let question = data["question"] as? String,
+              let response = data["response"] as? String,
+              let createdAtTimestamp = data["createdAt"] as? Timestamp else {
+            return nil
+        }
+        
+        // Optional fields
+        let mood = data["mood"] as? String
+        let relatedReadingId = (data["relatedReadingId"] as? String).flatMap { UUID(uuidString: $0) }
+        let tags = data["tags"] as? String
+        
+        return UserContext(
+            id: id,
+            userId: userId,
+            promptType: ContextPromptType(rawValue: promptType) ?? .freeform,
+            question: question,
+            response: response,
+            createdAt: createdAtTimestamp.dateValue(),
+            mood: mood,
+            relatedReadingId: relatedReadingId,
+            tags: tags
+        )
+    }
+    
     // MARK: - Helpers
     
     private func parseUserProfile(from data: [String: Any]) -> UserProfile? {
