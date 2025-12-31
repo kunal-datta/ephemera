@@ -13,6 +13,7 @@
 		8386D92B2F049AD000B81B47 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 8386D92A2F049AD000B81B47 /* FirebaseMessaging */; };
 		8386D9322F04A6DE00B81B47 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 8386D9312F04A6DE00B81B47 /* GoogleSignIn */; };
 		8386D9342F04A6DE00B81B47 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 8386D9332F04A6DE00B81B47 /* GoogleSignInSwift */; };
+		8386D9402F04B00000B81B47 /* SwissEphemeris in Frameworks */ = {isa = PBXBuildFile; productRef = 8386D93F2F04B00000B81B47 /* SwissEphemeris */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -80,6 +81,7 @@
 				8386D9342F04A6DE00B81B47 /* GoogleSignInSwift in Frameworks */,
 				8386D9272F049AD000B81B47 /* FirebaseFirestore in Frameworks */,
 				8386D9292F049AD000B81B47 /* FirebaseInAppMessaging-Beta in Frameworks */,
+				8386D9402F04B00000B81B47 /* SwissEphemeris in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -146,6 +148,7 @@
 				8386D92A2F049AD000B81B47 /* FirebaseMessaging */,
 				8386D9312F04A6DE00B81B47 /* GoogleSignIn */,
 				8386D9332F04A6DE00B81B47 /* GoogleSignInSwift */,
+				8386D93F2F04B00000B81B47 /* SwissEphemeris */,
 			);
 			productName = ephemera;
 			productReference = 8386D8E52F048CEA00B81B47 /* ephemera.app */;
@@ -232,6 +235,7 @@
 			packageReferences = (
 				8386D9232F049AD000B81B47 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				8386D9302F04A6DE00B81B47 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+				8386D93E2F04B00000B81B47 /* XCRemoteSwiftPackageReference "SwissEphemeris" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8386D8E62F048CEA00B81B47 /* Products */;
@@ -618,6 +622,14 @@
 				minimumVersion = 9.0.0;
 			};
 		};
+		8386D93E2F04B00000B81B47 /* XCRemoteSwiftPackageReference "SwissEphemeris" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/vsmithers1087/SwissEphemeris";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.0.99;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -650,6 +662,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 8386D9302F04A6DE00B81B47 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
 			productName = GoogleSignInSwift;
+		};
+		8386D93F2F04B00000B81B47 /* SwissEphemeris */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8386D93E2F04B00000B81B47 /* XCRemoteSwiftPackageReference "SwissEphemeris" */;
+			productName = SwissEphemeris;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

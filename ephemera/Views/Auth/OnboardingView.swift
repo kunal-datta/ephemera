@@ -50,6 +50,7 @@ struct OnboardingView: View {
     @State private var placeOfBirth = ""
     @State private var placeOfBirthLatitude: Double?
     @State private var placeOfBirthLongitude: Double?
+    @State private var placeOfBirthTimezone: String?
     @State private var placeOfBirthUnknown = false
     
     @State private var onboardingComplete = false
@@ -121,7 +122,9 @@ struct OnboardingView: View {
                             place: $placeOfBirth,
                             latitude: $placeOfBirthLatitude,
                             longitude: $placeOfBirthLongitude,
-                            placeUnknown: $placeOfBirthUnknown
+                            timezone: $placeOfBirthTimezone,
+                            placeUnknown: $placeOfBirthUnknown,
+                            birthDate: dateOfBirth
                         )
                     }
                 }
@@ -169,9 +172,6 @@ struct OnboardingView: View {
             }
         }
         .navigationBarBackButtonHidden(true)
-        .navigationDestination(isPresented: $onboardingComplete) {
-            HomeView()
-        }
         .onAppear {
             withAnimation(.easeOut(duration: 0.5)) {
                 showContent = true
@@ -184,6 +184,11 @@ struct OnboardingView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .fullScreenCover(isPresented: $onboardingComplete) {
+            NavigationStack {
+                HomeView()
+            }
+        }
     }
     
     private var canProceed: Bool {
@@ -228,6 +233,7 @@ struct OnboardingView: View {
             placeOfBirth: placeOfBirthUnknown ? nil : placeOfBirth,
             placeOfBirthLatitude: placeOfBirthUnknown ? nil : placeOfBirthLatitude,
             placeOfBirthLongitude: placeOfBirthUnknown ? nil : placeOfBirthLongitude,
+            placeOfBirthTimezone: placeOfBirthUnknown ? nil : placeOfBirthTimezone,
             placeOfBirthUnknown: placeOfBirthUnknown,
             authProvider: authProvider
         )
@@ -416,7 +422,9 @@ struct PlaceOfBirthInputView: View {
     @Binding var place: String
     @Binding var latitude: Double?
     @Binding var longitude: Double?
+    @Binding var timezone: String?
     @Binding var placeUnknown: Bool
+    let birthDate: Date  // Used for accurate timezone lookup
     @FocusState private var isFocused: Bool
     
     @StateObject private var placesService = PlacesService.shared
@@ -463,6 +471,7 @@ struct PlaceOfBirthInputView: View {
                                     place = ""
                                     latitude = nil
                                     longitude = nil
+                                    timezone = nil
                                     selectedPlace = nil
                                     placesService.clearPredictions()
                                     showDropdown = false
@@ -620,16 +629,24 @@ struct PlaceOfBirthInputView: View {
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()
         
-        // Fetch place details to get coordinates
+        // Fetch place details to get coordinates and timezone
         isFetchingDetails = true
         Task {
             do {
-                let details = try await placesService.fetchPlaceDetails(placeId: prediction.id)
+                // Pass birthDate for accurate historical timezone lookup
+                let details = try await placesService.fetchPlaceDetails(
+                    placeId: prediction.id,
+                    referenceDate: birthDate
+                )
                 await MainActor.run {
                     latitude = details.latitude
                     longitude = details.longitude
+                    timezone = details.timezoneId
                     isFetchingDetails = false
-                    print("📍 Place coordinates: \(details.latitude), \(details.longitude)")
+                    print("📍 Place: \(details.latitude), \(details.longitude)")
+                    if let tz = details.timezoneId {
+                        print("🕐 Timezone: \(tz)")
+                    }
                 }
             } catch {
                 await MainActor.run {

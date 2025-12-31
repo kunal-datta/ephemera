@@ -29,6 +29,8 @@ struct PlaceDetails {
     let formattedAddress: String
     let latitude: Double
     let longitude: Double
+    let timezoneId: String?        // IANA timezone ID (e.g., "America/New_York")
+    let timezoneOffsetSeconds: Int? // UTC offset in seconds
 }
 
 // MARK: - Places Service
@@ -100,8 +102,9 @@ class PlacesService: ObservableObject {
         error = nil
     }
     
-    /// Fetch place details including coordinates
-    func fetchPlaceDetails(placeId: String) async throws -> PlaceDetails {
+    /// Fetch place details including coordinates and timezone
+    /// Pass a reference date (like birth date) to get accurate historical timezone info
+    func fetchPlaceDetails(placeId: String, referenceDate: Date? = nil) async throws -> PlaceDetails {
         guard !apiKey.isEmpty else {
             throw PlacesError.missingApiKey
         }
@@ -132,12 +135,87 @@ class PlacesService: ObservableObject {
         
         let result = try JSONDecoder().decode(PlaceDetailsResponse.self, from: data)
         
+        let latitude = result.location?.latitude ?? 0
+        let longitude = result.location?.longitude ?? 0
+        
+        // Fetch timezone for this location
+        let timezone = try? await fetchTimezone(
+            latitude: latitude,
+            longitude: longitude,
+            timestamp: referenceDate ?? Date()
+        )
+        
         return PlaceDetails(
             placeId: placeId,
             name: result.displayName?.text ?? "",
             formattedAddress: result.formattedAddress ?? "",
-            latitude: result.location?.latitude ?? 0,
-            longitude: result.location?.longitude ?? 0
+            latitude: latitude,
+            longitude: longitude,
+            timezoneId: timezone?.timezoneId,
+            timezoneOffsetSeconds: timezone?.utcOffsetSeconds
+        )
+    }
+    
+    // MARK: - Timezone API
+    
+    /// Fetches timezone information for a given location and timestamp
+    /// Uses Google Timezone API: https://developers.google.com/maps/documentation/timezone
+    func fetchTimezone(latitude: Double, longitude: Double, timestamp: Date) async throws -> TimezoneResult {
+        guard !apiKey.isEmpty else {
+            throw PlacesError.missingApiKey
+        }
+        
+        // Convert date to Unix timestamp
+        let unixTimestamp = Int(timestamp.timeIntervalSince1970)
+        
+        // Build URL with query parameters
+        var components = URLComponents(string: "https://maps.googleapis.com/maps/api/timezone/json")!
+        components.queryItems = [
+            URLQueryItem(name: "location", value: "\(latitude),\(longitude)"),
+            URLQueryItem(name: "timestamp", value: String(unixTimestamp)),
+            URLQueryItem(name: "key", value: apiKey)
+        ]
+        
+        guard let url = components.url else {
+            throw PlacesError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw PlacesError.invalidResponse
+        }
+        
+        if httpResponse.statusCode != 200 {
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("❌ Timezone API response (\(httpResponse.statusCode)): \(responseString)")
+            }
+            throw PlacesError.httpError(httpResponse.statusCode)
+        }
+        
+        let result = try JSONDecoder().decode(TimezoneAPIResponse.self, from: data)
+        
+        // Check for API-level errors
+        if result.status != "OK" {
+            print("❌ Timezone API error: \(result.status) - \(result.errorMessage ?? "Unknown error")")
+            throw PlacesError.apiError(result.status, result.errorMessage)
+        }
+        
+        guard let timezoneId = result.timeZoneId else {
+            throw PlacesError.invalidResponse
+        }
+        
+        // Total offset = rawOffset + dstOffset
+        let totalOffset = (result.rawOffset ?? 0) + (result.dstOffset ?? 0)
+        
+        print("📍 Timezone for (\(latitude), \(longitude)): \(timezoneId) (UTC\(totalOffset >= 0 ? "+" : "")\(totalOffset / 3600))")
+        
+        return TimezoneResult(
+            timezoneId: timezoneId,
+            timezoneName: result.timeZoneName ?? timezoneId,
+            rawOffsetSeconds: result.rawOffset ?? 0,
+            dstOffsetSeconds: result.dstOffset ?? 0,
+            utcOffsetSeconds: totalOffset
         )
     }
     
@@ -245,6 +323,38 @@ private struct PlaceDetailsResponse: Codable {
 private struct LatLng: Codable {
     let latitude: Double?
     let longitude: Double?
+}
+
+// MARK: - Timezone API Response
+
+private struct TimezoneAPIResponse: Codable {
+    let status: String
+    let errorMessage: String?
+    let dstOffset: Int?       // DST offset in seconds
+    let rawOffset: Int?       // Standard time offset in seconds
+    let timeZoneId: String?   // IANA timezone ID (e.g., "America/New_York")
+    let timeZoneName: String? // Human-readable name (e.g., "Eastern Daylight Time")
+}
+
+/// Result of timezone lookup
+struct TimezoneResult {
+    let timezoneId: String         // IANA ID (e.g., "America/New_York")
+    let timezoneName: String       // Display name (e.g., "Eastern Daylight Time")
+    let rawOffsetSeconds: Int      // Standard time offset from UTC
+    let dstOffsetSeconds: Int      // Additional DST offset (0 if not in DST)
+    let utcOffsetSeconds: Int      // Total offset (raw + dst)
+    
+    /// Formatted offset string (e.g., "UTC-5" or "UTC+5:30")
+    var formattedOffset: String {
+        let hours = utcOffsetSeconds / 3600
+        let minutes = abs((utcOffsetSeconds % 3600) / 60)
+        
+        if minutes == 0 {
+            return "UTC\(hours >= 0 ? "+" : "")\(hours)"
+        } else {
+            return "UTC\(hours >= 0 ? "+" : "")\(hours):\(String(format: "%02d", minutes))"
+        }
+    }
 }
 
 // MARK: - Errors

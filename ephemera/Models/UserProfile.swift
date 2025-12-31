@@ -19,6 +19,7 @@ final class UserProfile {
     var placeOfBirth: String?
     var placeOfBirthLatitude: Double?
     var placeOfBirthLongitude: Double?
+    var placeOfBirthTimezone: String?  // IANA timezone ID (e.g., "America/New_York")
     var placeOfBirthUnknown: Bool
     var authProvider: String // "google" or "email"
     var createdAt: Date
@@ -34,6 +35,7 @@ final class UserProfile {
         placeOfBirth: String? = nil,
         placeOfBirthLatitude: Double? = nil,
         placeOfBirthLongitude: Double? = nil,
+        placeOfBirthTimezone: String? = nil,
         placeOfBirthUnknown: Bool = false,
         authProvider: String,
         createdAt: Date = Date(),
@@ -48,6 +50,7 @@ final class UserProfile {
         self.placeOfBirth = placeOfBirth
         self.placeOfBirthLatitude = placeOfBirthLatitude
         self.placeOfBirthLongitude = placeOfBirthLongitude
+        self.placeOfBirthTimezone = placeOfBirthTimezone
         self.placeOfBirthUnknown = placeOfBirthUnknown
         self.authProvider = authProvider
         self.createdAt = createdAt
