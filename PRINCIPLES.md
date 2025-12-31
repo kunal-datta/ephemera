@@ -104,6 +104,7 @@ These should feel momentous—not spammy.
 - **Typography-forward** — elegant serif for readings, clean sans for UI
 
 ### Tone of Voice
+- Highly specific to the individual and the information we know about them
 - Warm but not saccharine
 - Wise but not preachy
 - Grounded but open to mystery
@@ -133,6 +134,7 @@ These should feel momentous—not spammy.
   - User's profile context
 - Prompt engineering should embed evolutionary astrology principles
 - Responses should be consistent in voice and philosophy
+- Highly specific to the individual and the information we know about them
 
 ### Notifications
 - APNs for push delivery

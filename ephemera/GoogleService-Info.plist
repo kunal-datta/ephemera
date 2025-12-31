@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>426860422510-1f9b3hn7pkt870qlv3sea0j6rsld16vb.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.426860422510-1f9b3hn7pkt870qlv3sea0j6rsld16vb</string>
+	<key>API_KEY</key>
+	<string>AIzaSyClxOQlZLMdIHwF1wPApLy4SJKwS154Sk0</string>
+	<key>GCM_SENDER_ID</key>
+	<string>426860422510</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.vastoo.ephemera</string>
+	<key>PROJECT_ID</key>
+	<string>ephemera-43a3c</string>
+	<key>STORAGE_BUCKET</key>
+	<string>ephemera-43a3c.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:426860422510:ios:20ba12ea741e147d690d7f</string>
+</dict>
+</plist>
