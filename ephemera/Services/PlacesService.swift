@@ -100,82 +100,99 @@ class PlacesService: ObservableObject {
         error = nil
     }
     
-    // MARK: - API Calls
+    // MARK: - API Calls (Places API New)
     
     private func fetchPredictions(for query: String) async throws -> [PlacePrediction] {
         guard !apiKey.isEmpty else {
             throw PlacesError.missingApiKey
         }
         
-        let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-        
-        // Use Places Autocomplete API - filter to cities only
-        let urlString = "https://maps.googleapis.com/maps/api/place/autocomplete/json?input=\(encodedQuery)&types=(cities)&key=\(apiKey)"
+        // Use Places API (New) - Autocomplete endpoint
+        let urlString = "https://places.googleapis.com/v1/places:autocomplete"
         
         guard let url = URL(string: urlString) else {
             throw PlacesError.invalidURL
         }
         
-        let (data, response) = try await URLSession.shared.data(from: url)
+        // Build request body
+        // Max 5 types allowed - prioritize cities and neighborhoods
+        let requestBody: [String: Any] = [
+            "input": query,
+            "includedPrimaryTypes": [
+                "locality",                      // Cities
+                "sublocality",                   // Neighborhoods (e.g., Northridge, Brooklyn)
+                "neighborhood",                  // Neighborhoods
+                "postal_town",                   // Postal towns (UK)
+                "administrative_area_level_3"    // Minor civil divisions
+            ],
+            "languageCode": "en"
+        ]
+        
+        let jsonData = try JSONSerialization.data(withJSONObject: requestBody)
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = jsonData
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(apiKey, forHTTPHeaderField: "X-Goog-Api-Key")
+        request.setValue("suggestions.placePrediction.placeId,suggestions.placePrediction.text,suggestions.placePrediction.structuredFormat", forHTTPHeaderField: "X-Goog-FieldMask")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw PlacesError.invalidResponse
         }
         
-        guard httpResponse.statusCode == 200 else {
+        // Debug: print response for troubleshooting
+        if httpResponse.statusCode != 200 {
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("❌ Places API response (\(httpResponse.statusCode)): \(responseString)")
+            }
             throw PlacesError.httpError(httpResponse.statusCode)
         }
         
-        let result = try JSONDecoder().decode(PlacesAutocompleteResponse.self, from: data)
+        let result = try JSONDecoder().decode(PlacesNewAutocompleteResponse.self, from: data)
         
-        if result.status != "OK" && result.status != "ZERO_RESULTS" {
-            throw PlacesError.apiError(result.status, result.errorMessage)
-        }
-        
-        return result.predictions.map { prediction in
-            PlacePrediction(
-                id: prediction.placeId,
-                mainText: prediction.structuredFormatting.mainText,
-                secondaryText: prediction.structuredFormatting.secondaryText ?? "",
-                fullText: prediction.description
+        return result.suggestions?.compactMap { suggestion -> PlacePrediction? in
+            guard let prediction = suggestion.placePrediction else { return nil }
+            
+            let mainText = prediction.structuredFormat?.mainText?.text ?? prediction.text?.text ?? ""
+            let secondaryText = prediction.structuredFormat?.secondaryText?.text ?? ""
+            let fullText = prediction.text?.text ?? mainText
+            
+            return PlacePrediction(
+                id: prediction.placeId ?? UUID().uuidString,
+                mainText: mainText,
+                secondaryText: secondaryText,
+                fullText: fullText
             )
-        }
+        } ?? []
     }
 }
 
-// MARK: - API Response Models
+// MARK: - Places API (New) Response Models
 
-private struct PlacesAutocompleteResponse: Codable {
-    let predictions: [AutocompletePrediction]
-    let status: String
-    let errorMessage: String?
-    
-    enum CodingKeys: String, CodingKey {
-        case predictions, status
-        case errorMessage = "error_message"
-    }
+private struct PlacesNewAutocompleteResponse: Codable {
+    let suggestions: [Suggestion]?
 }
 
-private struct AutocompletePrediction: Codable {
-    let placeId: String
-    let description: String
-    let structuredFormatting: StructuredFormatting
-    
-    enum CodingKeys: String, CodingKey {
-        case placeId = "place_id"
-        case description
-        case structuredFormatting = "structured_formatting"
-    }
+private struct Suggestion: Codable {
+    let placePrediction: PlacePredictionResponse?
 }
 
-private struct StructuredFormatting: Codable {
-    let mainText: String
-    let secondaryText: String?
-    
-    enum CodingKeys: String, CodingKey {
-        case mainText = "main_text"
-        case secondaryText = "secondary_text"
-    }
+private struct PlacePredictionResponse: Codable {
+    let placeId: String?
+    let text: TextValue?
+    let structuredFormat: StructuredFormat?
+}
+
+private struct StructuredFormat: Codable {
+    let mainText: TextValue?
+    let secondaryText: TextValue?
+}
+
+private struct TextValue: Codable {
+    let text: String?
 }
 
 // MARK: - Errors
@@ -202,4 +219,3 @@ enum PlacesError: LocalizedError {
         }
     }
 }
-
