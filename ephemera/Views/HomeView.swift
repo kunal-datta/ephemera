@@ -164,17 +164,14 @@ struct HomeView: View {
         }
         .navigationDestination(isPresented: $showChart) {
             if let chart = generatedChart ?? currentChart {
-                BirthChartView(chart: chart)
+                BirthChartView(initialChart: chart)
             }
         }
         .navigationDestination(isPresented: $showProfile) {
             if let profile = currentProfile {
                 ProfileEditView(profile: profile) {
-                    // On profile update, delete existing chart so it can be regenerated
-                    if let existingChart = currentChart {
-                        modelContext.delete(existingChart)
-                        generatedChart = nil
-                    }
+                    // Chart has been deleted inside ProfileEditView, just clear local state
+                    generatedChart = nil
                 }
             }
         }
@@ -231,12 +228,18 @@ struct HomeView: View {
             case .ok:
                 // Create BirthChart from result
                 if let chart = BirthChart.from(result: result, userId: profile.id) {
-                    // Save to SwiftData
+                    // Delete any existing charts of the same type from SwiftData
+                    for existingChart in birthCharts where existingChart.chartType == chart.chartType {
+                        modelContext.delete(existingChart)
+                    }
+                    
+                    // Save new chart to SwiftData
                     modelContext.insert(chart)
                     
-                    // Save to Firestore
+                    // Save to Firestore (delete charts of same type first)
                     Task {
                         do {
+                            try await FirestoreService.shared.deleteBirthCharts(ofType: chart.chartType)
                             try await FirestoreService.shared.saveBirthChart(chart)
                             print("✅ Birth chart saved to Firestore")
                         } catch {

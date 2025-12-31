@@ -12,16 +12,23 @@ import SwiftUI
 import SwiftData
 
 struct BirthChartView: View {
-    let chart: BirthChart
+    let initialChart: BirthChart
     @Query private var profiles: [UserProfile]
+    @Query private var birthCharts: [BirthChart]
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var selectedPlanet: PlanetaryPosition?
     @State private var showPlanetDetail = false
     @State private var showProfile = false
+    @State private var shouldDismissAfterProfileUpdate = false
     
     private var currentProfile: UserProfile? {
         profiles.first
+    }
+    
+    // Use the latest chart from SwiftData, falling back to initial chart
+    private var chart: BirthChart {
+        birthCharts.first ?? initialChart
     }
     
     var body: some View {
@@ -97,10 +104,17 @@ struct BirthChartView: View {
         .navigationDestination(isPresented: $showProfile) {
             if let profile = currentProfile {
                 ProfileEditView(profile: profile) {
-                    // On profile update, delete this chart so it can be regenerated
-                    modelContext.delete(chart)
-                    dismiss()
+                    // Chart has been deleted inside ProfileEditView
+                    // Set flag to dismiss this view when profile sheet closes
+                    shouldDismissAfterProfileUpdate = true
                 }
+            }
+        }
+        .onChange(of: showProfile) { _, isShowing in
+            // When profile view is dismissed and we need to go back to home
+            if !isShowing && shouldDismissAfterProfileUpdate {
+                shouldDismissAfterProfileUpdate = false
+                dismiss()
             }
         }
         .preferredColorScheme(.dark)
@@ -788,7 +802,7 @@ struct ChartWheelView: View {
             )
         )
         
-        BirthChartView(chart: mockChart)
+        BirthChartView(initialChart: mockChart)
     }
 }
 

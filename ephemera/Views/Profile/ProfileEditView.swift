@@ -13,6 +13,7 @@ import SwiftData
 struct ProfileEditView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Query private var birthCharts: [BirthChart]
     
     let profile: UserProfile
     var onProfileUpdated: (() -> Void)?
@@ -150,9 +151,12 @@ struct ProfileEditView: View {
             Text(errorMessage ?? "An error occurred")
         }
         .alert("Saved", isPresented: $showSaveSuccess) {
-            Button("OK") { dismiss() }
+            Button("OK") { 
+                onProfileUpdated?()
+                dismiss()
+            }
         } message: {
-            Text("Your profile has been updated. If you changed birth details, regenerate your chart to see the changes.")
+            Text("Your profile and chart have been updated!")
         }
     }
     
@@ -577,20 +581,67 @@ struct ProfileEditView: View {
         profile.placeOfBirthUnknown = placeOfBirthUnknown
         profile.updatedAt = Date()
         
-        // Save to Firestore
+        // Delete existing charts (they need to be regenerated with new data)
+        for chart in birthCharts {
+            modelContext.delete(chart)
+        }
+        
+        // Save to Firestore, delete old charts, and generate new chart
         Task {
             do {
+                // Delete charts from Firestore first
+                try await FirestoreService.shared.deleteAllBirthCharts()
+                
+                // Save updated profile
                 try await FirestoreService.shared.saveUserProfile(profile)
+                
+                // Generate new chart with updated profile data
+                await generateNewChart()
+                
                 await MainActor.run {
                     isSaving = false
                     showSaveSuccess = true
-                    onProfileUpdated?()
                 }
             } catch {
                 await MainActor.run {
                     isSaving = false
                     errorMessage = "Failed to save profile: \(error.localizedDescription)"
                     showError = true
+                }
+            }
+        }
+    }
+    
+    private func generateNewChart() async {
+        // Build chart input from updated profile
+        let input = ChartInput(
+            name: profile.name,
+            birthDate: profile.dateOfBirth,
+            birthTime: profile.timeOfBirth,
+            birthTimeUnknown: profile.timeOfBirthUnknown,
+            birthPlace: profile.placeOfBirth,
+            latitude: profile.placeOfBirthLatitude,
+            longitude: profile.placeOfBirthLongitude,
+            timezone: profile.placeOfBirthTimezone,
+            nodeType: .trueNode
+        )
+        
+        // Generate the chart
+        let result = ChartCore.shared.generateChart(input: input)
+        
+        await MainActor.run {
+            if result.status == .ok, let chart = BirthChart.from(result: result, userId: profile.id) {
+                // Save to SwiftData
+                modelContext.insert(chart)
+                
+                // Save to Firestore
+                Task {
+                    do {
+                        try await FirestoreService.shared.saveBirthChart(chart)
+                        print("✅ New birth chart generated and saved to Firestore")
+                    } catch {
+                        print("❌ Failed to save new chart to Firestore: \(error)")
+                    }
                 }
             }
         }

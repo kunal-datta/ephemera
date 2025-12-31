@@ -133,6 +133,38 @@ class FirestoreService {
         return parseBirthChart(from: data)
     }
     
+    /// Deletes all birth charts for the current user
+    func deleteAllBirthCharts() async throws {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            throw FirestoreError.notAuthenticated
+        }
+        
+        let snapshot = try await db.collection("users").document(userId).collection("birthCharts").getDocuments()
+        
+        for document in snapshot.documents {
+            try await document.reference.delete()
+        }
+        
+        print("✅ All birth charts deleted from Firestore for userId: \(userId)")
+    }
+    
+    /// Deletes birth charts of a specific type for the current user
+    func deleteBirthCharts(ofType chartType: String) async throws {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            throw FirestoreError.notAuthenticated
+        }
+        
+        let snapshot = try await db.collection("users").document(userId).collection("birthCharts")
+            .whereField("chartType", isEqualTo: chartType)
+            .getDocuments()
+        
+        for document in snapshot.documents {
+            try await document.reference.delete()
+        }
+        
+        print("✅ Birth charts of type '\(chartType)' deleted from Firestore for userId: \(userId)")
+    }
+    
     private func parseBirthChart(from data: [String: Any]) -> BirthChart? {
         guard let idString = data["id"] as? String,
               let id = UUID(uuidString: idString),
