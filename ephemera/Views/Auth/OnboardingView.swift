@@ -224,6 +224,37 @@ struct OnboardingView: View {
     }
     
     private func saveProfile() {
+        // Store dateOfBirth at noon in the birth location's timezone
+        // This ensures the date is always correct regardless of device timezone
+        let normalizedDateOfBirth: Date = {
+            let birthTimezone: TimeZone
+            if let tzId = placeOfBirthTimezone, let tz = TimeZone(identifier: tzId) {
+                birthTimezone = tz
+            } else {
+                birthTimezone = TimeZone.current
+            }
+            
+            // Extract date as user sees it on their device
+            var deviceCalendar = Calendar.current
+            deviceCalendar.timeZone = TimeZone.current
+            let dateComponents = deviceCalendar.dateComponents([.year, .month, .day], from: dateOfBirth)
+            
+            // Store at noon in birth location timezone
+            var birthLocationCalendar = Calendar.current
+            birthLocationCalendar.timeZone = birthTimezone
+            
+            var normalized = DateComponents()
+            normalized.year = dateComponents.year
+            normalized.month = dateComponents.month
+            normalized.day = dateComponents.day
+            normalized.hour = 12  // Noon in birth location timezone
+            normalized.minute = 0
+            normalized.second = 0
+            normalized.timeZone = birthTimezone
+            
+            return birthLocationCalendar.date(from: normalized) ?? dateOfBirth
+        }()
+        
         // Normalize the timeOfBirth to use the actual birth date and birth location timezone
         // This makes the stored data cleaner and more meaningful
         let normalizedTimeOfBirth: Date? = {
@@ -264,7 +295,7 @@ struct OnboardingView: View {
         let profile = UserProfile(
             name: name,
             email: email,
-            dateOfBirth: dateOfBirth,
+            dateOfBirth: normalizedDateOfBirth,
             timeOfBirth: normalizedTimeOfBirth,
             timeOfBirthUnknown: timeOfBirthUnknown,
             placeOfBirth: placeOfBirthUnknown ? nil : placeOfBirth,

@@ -343,7 +343,7 @@ class ChartCore {
     // MARK: - Helper Methods
     
     private func combineDateAndTime(date: Date, time: Date, timezone: TimeZone) -> Date {
-        // The timeOfBirth is normalized during onboarding to contain:
+        // The timeOfBirth is normalized during onboarding/profile edit to contain:
         // - The correct birth date
         // - The correct birth location timezone
         //

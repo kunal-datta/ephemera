@@ -402,22 +402,61 @@ struct ProfileEditView: View {
     
     private func loadProfileData() {
         name = profile.name
-        dateOfBirth = profile.dateOfBirth
         timeOfBirthUnknown = profile.timeOfBirthUnknown
         placeOfBirthUnknown = profile.placeOfBirthUnknown
         
-        if let time = profile.timeOfBirth {
-            timeOfBirth = time
-        }
+        placeOfBirthLatitude = profile.placeOfBirthLatitude
+        placeOfBirthLongitude = profile.placeOfBirthLongitude
+        placeOfBirthTimezone = profile.placeOfBirthTimezone
         
         if let place = profile.placeOfBirth {
             placeOfBirth = place
             searchText = place
         }
         
-        placeOfBirthLatitude = profile.placeOfBirthLatitude
-        placeOfBirthLongitude = profile.placeOfBirthLongitude
-        placeOfBirthTimezone = profile.placeOfBirthTimezone
+        // Get the birth location timezone
+        let birthTimezone: TimeZone
+        if let tzId = profile.placeOfBirthTimezone, let tz = TimeZone(identifier: tzId) {
+            birthTimezone = tz
+        } else {
+            birthTimezone = TimeZone.current
+        }
+        
+        // Extract date components from stored date using birth location timezone
+        var birthLocationCalendar = Calendar.current
+        birthLocationCalendar.timeZone = birthTimezone
+        let dateComponents = birthLocationCalendar.dateComponents([.year, .month, .day], from: profile.dateOfBirth)
+        
+        // Create a Date that displays correctly in device timezone
+        var deviceCalendar = Calendar.current
+        deviceCalendar.timeZone = TimeZone.current
+        
+        var localDate = DateComponents()
+        localDate.year = dateComponents.year
+        localDate.month = dateComponents.month
+        localDate.day = dateComponents.day
+        localDate.hour = 12  // Noon in device timezone for display
+        localDate.minute = 0
+        localDate.timeZone = TimeZone.current
+        
+        dateOfBirth = deviceCalendar.date(from: localDate) ?? profile.dateOfBirth
+        
+        // Extract time components from stored time using birth location timezone
+        // Then create a Date that displays those same numbers in device timezone
+        if let storedTime = profile.timeOfBirth {
+            let timeComponents = birthLocationCalendar.dateComponents([.hour, .minute, .second], from: storedTime)
+            
+            var deviceTime = DateComponents()
+            deviceTime.year = dateComponents.year
+            deviceTime.month = dateComponents.month
+            deviceTime.day = dateComponents.day
+            deviceTime.hour = timeComponents.hour
+            deviceTime.minute = timeComponents.minute
+            deviceTime.second = timeComponents.second
+            deviceTime.timeZone = TimeZone.current
+            
+            timeOfBirth = deviceCalendar.date(from: deviceTime) ?? storedTime
+        }
     }
     
     private func clearPlace() {
@@ -464,6 +503,37 @@ struct ProfileEditView: View {
     private func saveProfile() {
         isSaving = true
         
+        // Store dateOfBirth at noon in the birth location's timezone
+        // This ensures the date is always correct regardless of device timezone
+        let normalizedDateOfBirth: Date = {
+            let birthTimezone: TimeZone
+            if let tzId = placeOfBirthTimezone, let tz = TimeZone(identifier: tzId) {
+                birthTimezone = tz
+            } else {
+                birthTimezone = TimeZone.current
+            }
+            
+            // Extract date as user sees it on their device
+            var deviceCalendar = Calendar.current
+            deviceCalendar.timeZone = TimeZone.current
+            let dateComponents = deviceCalendar.dateComponents([.year, .month, .day], from: dateOfBirth)
+            
+            // Store at noon in birth location timezone
+            var birthLocationCalendar = Calendar.current
+            birthLocationCalendar.timeZone = birthTimezone
+            
+            var normalized = DateComponents()
+            normalized.year = dateComponents.year
+            normalized.month = dateComponents.month
+            normalized.day = dateComponents.day
+            normalized.hour = 12  // Noon in birth location timezone
+            normalized.minute = 0
+            normalized.second = 0
+            normalized.timeZone = birthTimezone
+            
+            return birthLocationCalendar.date(from: normalized) ?? dateOfBirth
+        }()
+        
         // Normalize the timeOfBirth with correct date and timezone
         let normalizedTimeOfBirth: Date? = {
             guard !timeOfBirthUnknown else { return nil }
@@ -497,7 +567,7 @@ struct ProfileEditView: View {
         
         // Update the profile object
         profile.name = name
-        profile.dateOfBirth = dateOfBirth
+        profile.dateOfBirth = normalizedDateOfBirth
         profile.timeOfBirth = normalizedTimeOfBirth
         profile.timeOfBirthUnknown = timeOfBirthUnknown
         profile.placeOfBirth = placeOfBirthUnknown ? nil : placeOfBirth

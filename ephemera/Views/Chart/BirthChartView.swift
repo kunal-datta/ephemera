@@ -114,6 +114,10 @@ struct BirthChartView: View {
                 let dateFormatter: DateFormatter = {
                     let f = DateFormatter()
                     f.dateStyle = .long
+                    // Use birth location timezone to display the date correctly
+                    if let tzId = metadata.timezone, let tz = TimeZone(identifier: tzId) {
+                        f.timeZone = tz
+                    }
                     return f
                 }()
                 
