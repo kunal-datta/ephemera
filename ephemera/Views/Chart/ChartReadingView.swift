@@ -155,9 +155,6 @@ struct ChartReadingView: View {
                     rawContentCard(reading.content)
                 }
                 
-                // Regenerate button
-                regenerateButton
-                
                 Spacer(minLength: 40)
             }
             .padding(.horizontal, 20)
@@ -237,25 +234,6 @@ struct ChartReadingView: View {
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color(red: 0.08, green: 0.08, blue: 0.12))
         )
-    }
-    
-    private var regenerateButton: some View {
-        Button(action: generateReading) {
-            HStack(spacing: 8) {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 14, weight: .medium))
-                Text("Generate New Reading")
-                    .font(.system(size: 14, weight: .medium))
-            }
-            .foregroundColor(Color(red: 0.6, green: 0.55, blue: 0.7))
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color(red: 0.5, green: 0.45, blue: 0.6).opacity(0.3), lineWidth: 1)
-            )
-        }
-        .padding(.top, 8)
     }
     
     // MARK: - Error View

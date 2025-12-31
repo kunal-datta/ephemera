@@ -95,7 +95,10 @@ class AIReadingService: ObservableObject {
         
         defer { isGenerating = false }
         
-        let prompt = buildNatalReadingPrompt(chart: chart, profile: profile, contexts: contexts)
+        // Calculate current transits
+        let transits = ChartCore.shared.getSignificantTransits(natalChart: chart, limit: 6)
+        
+        let prompt = buildNatalReadingPrompt(chart: chart, profile: profile, contexts: contexts, transits: transits)
         
         do {
             let response = try await model.generateContent(prompt)
@@ -119,18 +122,188 @@ class AIReadingService: ObservableObject {
         }
     }
     
+    // MARK: - Generate Element Explanation
+    
+    /// Generates a personalized explanation for a specific chart element
+    func generateElementExplanation(
+        element: ChartElementSelection,
+        chart: BirthChart,
+        profile: UserProfile,
+        contexts: [UserContext]
+    ) async throws -> String {
+        // Get transits relevant to this element
+        let relevantTransits = getTransitsForElement(element: element, chart: chart)
+        
+        let prompt = buildElementExplanationPrompt(
+            element: element,
+            chart: chart,
+            profile: profile,
+            contexts: contexts,
+            relevantTransits: relevantTransits
+        )
+        
+        let response = try await model.generateContent(prompt)
+        
+        guard let text = response.text else {
+            throw AIReadingError.noResponse
+        }
+        
+        return text
+    }
+    
+    private func buildElementExplanationPrompt(
+        element: ChartElementSelection,
+        chart: BirthChart,
+        profile: UserProfile,
+        contexts: [UserContext],
+        relevantTransits: [TransitAspect]
+    ) -> String {
+        let contextSummary = contexts.formattedForPrompt()
+        let currentDate = formatCurrentDate()
+        let elementDescription = describeElement(element)
+        
+        // Format relevant transits
+        let transitInfo: String
+        if relevantTransits.isEmpty {
+            transitInfo = "No major transits are currently activating this placement."
+        } else {
+            transitInfo = relevantTransits.formattedForPrompt()
+        }
+        
+        return """
+        You are a wise, compassionate evolutionary astrologer speaking directly to \(profile.name).
+        
+        ## Your Approach
+        - Warm, personal, and grounded
+        - Never generic — this is about THEIR chart and life
+        - Connect the astrological meaning to their actual experiences (if they've shared any)
+        - Mention what this means right now (today is \(currentDate)) — especially if there are transits
+        - Keep it concise but meaningful — about 150-250 words
+        - Never fear-monger or predict negative outcomes
+        - Frame challenges as growth opportunities
+        
+        ## The Person
+        Name: \(profile.name)
+        
+        ## What They've Shared About Their Life
+        \(contextSummary)
+        
+        ## Today's Date
+        \(currentDate)
+        
+        ## What They Tapped On
+        \(elementDescription)
+        
+        ## Current Transits Affecting This Placement
+        \(transitInfo)
+        
+        ## Chart Context
+        \(buildChartSummary(chart: chart))
+        
+        ## Your Task
+        Write a brief, personal explanation of this placement for \(profile.name). 
+        
+        Start by explaining what this placement means in general, then connect it to:
+        1. Their specific life context (if they've shared any)
+        2. Any current transits that are activating this point — this is key for making it feel timely!
+        3. How this energy might be showing up for them right now
+        4. A brief insight or encouragement
+        
+        If there are significant transits to this placement, emphasize what's happening NOW and how it connects to this natal position.
+        
+        Write in second person ("You..."), as if speaking directly to them. Be warm and insightful. Don't use headers or bullet points — write in flowing prose.
+        """
+    }
+    
+    /// Get transits that are relevant to a specific chart element
+    private func getTransitsForElement(element: ChartElementSelection, chart: BirthChart) -> [TransitAspect] {
+        let allTransits = ChartCore.shared.calculateTransits(natalChart: chart)
+        
+        switch element {
+        case .planet(let pos):
+            // Get transits to this specific planet
+            return allTransits.filter { $0.natalPlanet == pos.planet }
+            
+        case .bigThree(_, _, let planet):
+            // Get transits to Sun, Moon, or Ascendant
+            if let planet = planet {
+                return allTransits.filter { $0.natalPlanet == planet }
+            }
+            // For Rising, we don't have transits to the Ascendant point directly in this model
+            return []
+            
+        case .aspect(let asp):
+            // Get transits to either planet in the aspect
+            return allTransits.filter { $0.natalPlanet == asp.planet1 || $0.natalPlanet == asp.planet2 }
+            
+        case .evolutionaryPoint(_, let pos):
+            // Get transits to this evolutionary point (node or Pluto)
+            return allTransits.filter { $0.natalPlanet == pos.planet }
+        }
+    }
+    
+    private func describeElement(_ element: ChartElementSelection) -> String {
+        switch element {
+        case .planet(let pos):
+            var desc = "\(pos.planet.rawValue) in \(pos.sign.rawValue) at \(pos.formattedDegree)"
+            if let house = pos.house { desc += " in House \(house)" }
+            if pos.isRetrograde { desc += " (Retrograde)" }
+            return desc
+            
+        case .bigThree(let type, let sign, _):
+            switch type {
+            case "Sun":
+                return "Sun in \(sign.rawValue) — their core identity, ego, and life purpose"
+            case "Moon":
+                return "Moon in \(sign.rawValue) — their emotional nature, inner needs, and instincts"
+            case "Rising":
+                return "Rising Sign / Ascendant in \(sign.rawValue) — how they approach life and appear to others"
+            default:
+                return "\(type) in \(sign.rawValue)"
+            }
+            
+        case .aspect(let asp):
+            let nature = asp.type.isHarmonious ? "harmonious" : "dynamic/challenging"
+            return "\(asp.planet1.rawValue) \(asp.type.rawValue) \(asp.planet2.rawValue) — a \(nature) aspect with \(String(format: "%.1f", asp.orb))° orb"
+            
+        case .evolutionaryPoint(let title, let pos):
+            var desc = "\(title) in \(pos.sign.rawValue) at \(pos.formattedDegree)"
+            if let house = pos.house { desc += " in House \(house)" }
+            switch title {
+            case "North Node":
+                desc += " — the soul's growth direction and life purpose"
+            case "South Node":
+                desc += " — past life patterns, comfort zone, and innate gifts"
+            case "Pluto":
+                desc += " — the soul's evolutionary edge and transformation"
+            default:
+                break
+            }
+            return desc
+        }
+    }
+    
+    private func formatCurrentDate() -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .full
+        return formatter.string(from: Date())
+    }
+    
     // MARK: - Prompt Building
     
     private func buildNatalReadingPrompt(
         chart: BirthChart,
         profile: UserProfile,
-        contexts: [UserContext]
+        contexts: [UserContext],
+        transits: [TransitAspect]
     ) -> String {
         let chartSummary = buildChartSummary(chart: chart)
         let contextSummary = contexts.formattedForPrompt()
+        let transitSummary = transits.formattedForPrompt()
+        let currentDate = formatCurrentDate()
         
         return """
-        You are a wise, compassionate evolutionary astrologer. Your role is to help \(profile.name) understand their birth chart in a way that feels deeply personal and meaningful.
+        You are a wise, compassionate evolutionary astrologer. Your role is to help \(profile.name) understand their birth chart in a way that feels deeply personal and meaningful — and relevant to what's happening in their life RIGHT NOW.
         
         ## Your Philosophy
         - You practice evolutionary astrology, which sees the birth chart as a map of the soul's journey
@@ -139,6 +312,7 @@ class AIReadingService: ObservableObject {
         - Challenging aspects are opportunities for transformation, not doom
         - You never fear-monger or predict negative outcomes
         - You make the person feel unique and special — their life story matters
+        - You connect the natal chart to current transits to show what's alive for them NOW
         
         ## Your Tone
         - Warm, kind, and compassionate
@@ -150,8 +324,14 @@ class AIReadingService: ObservableObject {
         ## The Person
         Name: \(profile.name)
         
+        ## Today's Date
+        \(currentDate)
+        
         ## Their Birth Chart
         \(chartSummary)
+        
+        ## Current Planetary Transits to Their Chart
+        \(transitSummary)
         
         ## What They've Shared About Their Life
         \(contextSummary)
@@ -161,6 +341,7 @@ class AIReadingService: ObservableObject {
         1. Their chart placements and what they mean for their unique journey
         2. The life context they've shared (if any)
         3. Insights about their soul's evolutionary path
+        4. What the current transits mean for them RIGHT NOW — this is key! The reading should feel timely and relevant.
         
         Structure your reading with these sections (use ## headers):
         
@@ -179,13 +360,13 @@ class AIReadingService: ObservableObject {
         ## Your Soul's Journey
         The North Node/South Node axis — where they're growing from and toward. This is the heart of evolutionary astrology.
         
-        ## Gifts & Challenges
-        Key aspects and patterns that represent their strengths and growth edges.
+        ## What's Alive for You Now
+        This is crucial: Interpret the current transits and what they mean for \(profile.name) at this moment in time. What themes are being activated? What opportunities or challenges are present? Make this feel immediate and relevant to their life. If they've shared context, connect the transits to what's actually happening for them.
         
         ## A Message for You
-        A closing paragraph that feels like personal encouragement from a wise friend.
+        A closing paragraph that feels like personal encouragement from a wise friend, tying together their natal potential with the current moment.
         
-        Keep the total reading around 800-1000 words. Be specific to their chart, not generic. If they've shared life context, weave it in naturally where relevant.
+        Keep the total reading around 900-1100 words. Be specific to their chart and current transits, not generic. The reading should feel like it was written TODAY, for THIS person, at THIS moment in their journey.
         """
     }
     

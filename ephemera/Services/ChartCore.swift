@@ -406,6 +406,206 @@ class ChartCore {
     }
 }
 
+// MARK: - Transit Calculation
+
+/// A transit aspect between a transiting planet and a natal planet
+struct TransitAspect: Identifiable {
+    var id: String { "\(transitingPlanet.rawValue)-\(aspectType.rawValue)-\(natalPlanet.rawValue)" }
+    
+    let transitingPlanet: Planet
+    let transitingPosition: PlanetaryPosition
+    let natalPlanet: Planet
+    let natalPosition: PlanetaryPosition
+    let aspectType: AspectType
+    let orb: Double
+    let isApplying: Bool?
+    
+    /// How significant is this transit (higher = more important)
+    var significance: Int {
+        var score = 0
+        
+        // Outer planets transiting personal planets are most significant
+        if transitingPlanet.isOuter && natalPlanet.isPersonal {
+            score += 10
+        }
+        
+        // Saturn and Jupiter are significant
+        if transitingPlanet == .saturn || transitingPlanet == .jupiter {
+            score += 7
+        }
+        
+        // Transits to Sun, Moon, or Ascendant-ruler are important
+        if natalPlanet == .sun || natalPlanet == .moon {
+            score += 5
+        }
+        
+        // Conjunctions and oppositions are strongest
+        if aspectType == .conjunction || aspectType == .opposition {
+            score += 3
+        }
+        
+        // Tighter orbs are more potent
+        if orb < 1.0 {
+            score += 3
+        } else if orb < 2.0 {
+            score += 2
+        }
+        
+        return score
+    }
+}
+
+extension ChartCore {
+    
+    // MARK: - Transit Calculation
+    
+    /// Calculate current transits to a natal chart
+    func calculateTransits(
+        natalChart: BirthChart,
+        transitDate: Date = Date()
+    ) -> [TransitAspect] {
+        // Get current planetary positions
+        let transitingPlanets = ephemeris.getAllPlanetPositions(date: transitDate, useTrueNode: true)
+        let natalPlanets = natalChart.planets
+        
+        var transits: [TransitAspect] = []
+        
+        // Define orbs for transits (tighter than natal aspects)
+        func getTransitOrb(transitPlanet: Planet, natalPlanet: Planet) -> Double {
+            // Outer planets get wider orbs as they move slowly
+            if transitPlanet == .pluto || transitPlanet == .neptune || transitPlanet == .uranus {
+                return 3.0
+            } else if transitPlanet == .saturn || transitPlanet == .jupiter {
+                return 4.0
+            } else if transitPlanet == .sun || transitPlanet == .moon {
+                return 5.0
+            } else {
+                return 3.0  // Inner planets
+            }
+        }
+        
+        // Aspect angles
+        let aspectAngles: [(AspectType, Double)] = [
+            (.conjunction, 0),
+            (.sextile, 60),
+            (.square, 90),
+            (.trine, 120),
+            (.opposition, 180)
+        ]
+        
+        // Compare each transiting planet to each natal planet
+        for transitPos in transitingPlanets {
+            // Skip South Node (redundant with North Node)
+            if transitPos.planet == .southNode { continue }
+            
+            for natalPos in natalPlanets {
+                // Skip South Node
+                if natalPos.planet == .southNode { continue }
+                
+                let orb = getTransitOrb(transitPlanet: transitPos.planet, natalPlanet: natalPos.planet)
+                
+                // Calculate angular difference
+                var diff = abs(transitPos.longitude - natalPos.longitude)
+                if diff > 180 {
+                    diff = 360 - diff
+                }
+                
+                // Check each aspect type
+                for (aspectType, angle) in aspectAngles {
+                    let orbDiff = abs(diff - angle)
+                    if orbDiff <= orb {
+                        // Determine if applying or separating
+                        // (simplified - would need speed data for accuracy)
+                        let isApplying: Bool? = nil
+                        
+                        transits.append(TransitAspect(
+                            transitingPlanet: transitPos.planet,
+                            transitingPosition: transitPos,
+                            natalPlanet: natalPos.planet,
+                            natalPosition: natalPos,
+                            aspectType: aspectType,
+                            orb: orbDiff,
+                            isApplying: isApplying
+                        ))
+                        break  // Only one aspect per pair
+                    }
+                }
+            }
+        }
+        
+        // Sort by significance (most important first)
+        return transits.sorted { $0.significance > $1.significance }
+    }
+    
+    /// Get a summary of the most important current transits
+    func getSignificantTransits(
+        natalChart: BirthChart,
+        transitDate: Date = Date(),
+        limit: Int = 5
+    ) -> [TransitAspect] {
+        let allTransits = calculateTransits(natalChart: natalChart, transitDate: transitDate)
+        return Array(allTransits.prefix(limit))
+    }
+}
+
+// MARK: - Transit Formatting for AI
+
+extension Array where Element == TransitAspect {
+    /// Format transits for inclusion in an AI prompt
+    func formattedForPrompt() -> String {
+        guard !isEmpty else { return "No significant transits at this time." }
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .full
+        let today = dateFormatter.string(from: Date())
+        
+        var result = "Current Transits (as of \(today)):\n\n"
+        
+        for transit in self {
+            let transitPlanetStr = "\(transit.transitingPlanet.rawValue) at \(transit.transitingPosition.formattedDegree) \(transit.transitingPosition.sign.rawValue)"
+            let natalPlanetStr = "natal \(transit.natalPlanet.rawValue) at \(transit.natalPosition.formattedDegree) \(transit.natalPosition.sign.rawValue)"
+            let orbStr = String(format: "%.1f", transit.orb)
+            
+            result += "• Transiting \(transitPlanetStr) is \(transit.aspectType.rawValue.lowercased()) your \(natalPlanetStr) (\(orbStr)° orb)\n"
+            
+            // Add brief interpretation hint
+            result += "  → \(transitInterpretationHint(transit))\n\n"
+        }
+        
+        return result
+    }
+    
+    private func transitInterpretationHint(_ transit: TransitAspect) -> String {
+        // Brief hints to guide the AI
+        switch transit.transitingPlanet {
+        case .saturn:
+            return "Themes of responsibility, structure, limitations, maturity, or karma"
+        case .jupiter:
+            return "Themes of expansion, opportunity, growth, or excess"
+        case .pluto:
+            return "Deep transformation, power dynamics, rebirth, or intensity"
+        case .neptune:
+            return "Spirituality, dreams, confusion, idealism, or dissolution"
+        case .uranus:
+            return "Sudden changes, liberation, awakening, or disruption"
+        case .mars:
+            return "Energy, action, conflict, drive, or assertion"
+        case .venus:
+            return "Relationships, values, beauty, pleasure, or harmony"
+        case .mercury:
+            return "Communication, thinking, short trips, or decisions"
+        case .sun:
+            return "Vitality, identity focus, recognition, or self-expression"
+        case .moon:
+            return "Emotional shifts, needs, home, or instinctive reactions"
+        case .northNode:
+            return "Karmic direction, growth opportunities, fated encounters"
+        default:
+            return "Significant energy activation"
+        }
+    }
+}
+
 // MARK: - BirthChart Creation Extension
 
 extension BirthChart {

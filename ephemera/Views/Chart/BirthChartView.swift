@@ -11,10 +11,28 @@
 import SwiftUI
 import SwiftData
 
+/// What the user tapped on for the detail sheet
+enum ChartElementSelection: Identifiable {
+    case planet(PlanetaryPosition)
+    case bigThree(type: String, sign: ZodiacSign, planet: Planet?) // "Sun", "Moon", or "Rising"
+    case aspect(ChartAspect)
+    case evolutionaryPoint(title: String, position: PlanetaryPosition)
+    
+    var id: String {
+        switch self {
+        case .planet(let pos): return "planet-\(pos.planet.rawValue)"
+        case .bigThree(let type, _, _): return "bigthree-\(type)"
+        case .aspect(let asp): return "aspect-\(asp.id)"
+        case .evolutionaryPoint(let title, _): return "evo-\(title)"
+        }
+    }
+}
+
 struct BirthChartView: View {
     let initialChart: BirthChart
     @Query private var profiles: [UserProfile]
     @Query private var birthCharts: [BirthChart]
+    @Query private var contexts: [UserContext]
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var selectedPlanet: PlanetaryPosition?
@@ -22,9 +40,15 @@ struct BirthChartView: View {
     @State private var showProfile = false
     @State private var showReading = false
     @State private var shouldDismissAfterProfileUpdate = false
+    @State private var selectedElement: ChartElementSelection?
     
     private var currentProfile: UserProfile? {
         profiles.first
+    }
+    
+    private var userContexts: [UserContext] {
+        guard let profile = currentProfile else { return [] }
+        return contexts.filter { $0.userId == profile.id }
     }
     
     // Use the latest chart from SwiftData, falling back to initial chart
@@ -127,6 +151,18 @@ struct BirthChartView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .sheet(item: $selectedElement) { element in
+            if let profile = currentProfile {
+                ChartElementDetailSheet(
+                    element: element,
+                    chart: chart,
+                    profile: profile,
+                    contexts: userContexts
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+        }
     }
     
     // MARK: - Get Reading Button
@@ -279,6 +315,9 @@ struct BirthChartView: View {
             HStack(spacing: 20) {
                 if let sun = chart.position(for: .sun) {
                     bigThreeCard(title: "Sun", sign: sun.sign, symbol: "☉")
+                        .onTapGesture {
+                            selectedElement = .bigThree(type: "Sun", sign: sun.sign, planet: .sun)
+                        }
                 }
                 
                 if let moon = chart.position(for: .moon) {
@@ -288,10 +327,16 @@ struct BirthChartView: View {
                         symbol: "☽",
                         isUncertain: moon.signUncertain
                     )
+                    .onTapGesture {
+                        selectedElement = .bigThree(type: "Moon", sign: moon.sign, planet: .moon)
+                    }
                 }
                 
                 if let rising = chart.risingSign {
                     bigThreeCard(title: "Rising", sign: rising, symbol: "↑")
+                        .onTapGesture {
+                            selectedElement = .bigThree(type: "Rising", sign: rising, planet: nil)
+                        }
                 } else {
                     // Placeholder for missing rising
                     bigThreePlaceholder(title: "Rising")
@@ -336,6 +381,7 @@ struct BirthChartView: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .contentShape(Rectangle()) // Makes entire area tappable
     }
     
     private func bigThreePlaceholder(title: String) -> some View {
@@ -376,6 +422,9 @@ struct BirthChartView: View {
             ], spacing: 12) {
                 ForEach(chart.planets, id: \.planet) { position in
                     planetCard(position: position)
+                        .onTapGesture {
+                            selectedElement = .planet(position)
+                        }
                 }
             }
         }
@@ -429,6 +478,7 @@ struct BirthChartView: View {
                         .stroke(Color.white.opacity(0.04), lineWidth: 1)
                 )
         )
+        .contentShape(Rectangle())
     }
     
     // MARK: - Evolutionary Core Section
@@ -452,6 +502,9 @@ struct BirthChartView: View {
                                 position: northNode,
                                 color: Color(red: 0.4, green: 0.7, blue: 0.5)
                             )
+                            .onTapGesture {
+                                selectedElement = .evolutionaryPoint(title: "North Node", position: northNode)
+                            }
                         }
                         
                         if let southNode = evoCore.southNode {
@@ -461,6 +514,9 @@ struct BirthChartView: View {
                                 position: southNode,
                                 color: Color(red: 0.7, green: 0.5, blue: 0.4)
                             )
+                            .onTapGesture {
+                                selectedElement = .evolutionaryPoint(title: "South Node", position: southNode)
+                            }
                         }
                     }
                     
@@ -473,6 +529,9 @@ struct BirthChartView: View {
                             color: Color(red: 0.6, green: 0.4, blue: 0.7),
                             fullWidth: true
                         )
+                        .onTapGesture {
+                            selectedElement = .evolutionaryPoint(title: "Pluto", position: pluto)
+                        }
                     }
                 }
                 
@@ -550,6 +609,7 @@ struct BirthChartView: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(color.opacity(0.05))
         )
+        .contentShape(Rectangle())
     }
     
     // MARK: - Aspects Section
@@ -565,6 +625,9 @@ struct BirthChartView: View {
             VStack(spacing: 8) {
                 ForEach(aspects.prefix(10)) { aspect in
                     aspectRow(aspect: aspect)
+                        .onTapGesture {
+                            selectedElement = .aspect(aspect)
+                        }
                 }
             }
         }
@@ -603,6 +666,7 @@ struct BirthChartView: View {
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color(red: 0.08, green: 0.08, blue: 0.12))
         )
+        .contentShape(Rectangle())
     }
     
     // MARK: - Helper Functions
@@ -830,6 +894,240 @@ struct ChartWheelView: View {
             return Color(red: 0.5, green: 0.7, blue: 0.9)
         case .water:
             return Color(red: 0.5, green: 0.55, blue: 0.85)
+        }
+    }
+}
+
+// MARK: - Chart Element Detail Sheet
+
+struct ChartElementDetailSheet: View {
+    let element: ChartElementSelection
+    let chart: BirthChart
+    let profile: UserProfile
+    let contexts: [UserContext]
+    
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var aiService = AIReadingService.shared
+    @State private var explanation: String?
+    @State private var isLoading = true
+    @State private var hasAppeared = false
+    
+    var body: some View {
+        ZStack {
+            // Background
+            Color(red: 0.06, green: 0.06, blue: 0.1)
+                .ignoresSafeArea()
+            
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 20) {
+                    // Header
+                    elementHeader
+                    
+                    Divider()
+                        .background(Color.white.opacity(0.1))
+                    
+                    // Content
+                    if isLoading {
+                        loadingView
+                    } else if let explanation = explanation {
+                        explanationContent(explanation)
+                    }
+                    
+                    Spacer(minLength: 20)
+                }
+                .padding(24)
+            }
+        }
+        .onAppear {
+            if !hasAppeared {
+                hasAppeared = true
+                generateExplanation()
+            }
+        }
+    }
+    
+    private var elementHeader: some View {
+        HStack(spacing: 16) {
+            // Symbol
+            ZStack {
+                Circle()
+                    .fill(elementColor.opacity(0.2))
+                    .frame(width: 56, height: 56)
+                
+                Text(elementSymbol)
+                    .font(.system(size: 28))
+                    .foregroundColor(elementColor)
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(elementTitle)
+                    .font(.custom("Georgia", size: 22))
+                    .foregroundColor(Color(red: 0.95, green: 0.92, blue: 0.88))
+                
+                Text(elementSubtitle)
+                    .font(.system(size: 14))
+                    .foregroundColor(Color(red: 0.6, green: 0.58, blue: 0.55))
+            }
+            
+            Spacer()
+        }
+    }
+    
+    private var loadingView: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: Color(red: 0.7, green: 0.65, blue: 0.8)))
+                .scaleEffect(1.2)
+            
+            Text("Understanding this placement...")
+                .font(.system(size: 14))
+                .foregroundColor(Color(red: 0.6, green: 0.58, blue: 0.55))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
+    }
+    
+    private func explanationContent(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Current context label
+            HStack(spacing: 6) {
+                Image(systemName: "clock")
+                    .font(.system(size: 11))
+                Text("As of \(formattedCurrentDate)")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundColor(Color(red: 0.5, green: 0.45, blue: 0.6))
+            
+            Text(text)
+                .font(.system(size: 15))
+                .foregroundColor(Color(red: 0.8, green: 0.78, blue: 0.75))
+                .lineSpacing(6)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+    
+    // MARK: - Computed Properties
+    
+    private var elementTitle: String {
+        switch element {
+        case .planet(let pos):
+            return "\(pos.planet.rawValue) in \(pos.sign.rawValue)"
+        case .bigThree(let type, let sign, _):
+            return "\(type) in \(sign.rawValue)"
+        case .aspect(let asp):
+            return "\(asp.planet1.rawValue) \(asp.type.rawValue) \(asp.planet2.rawValue)"
+        case .evolutionaryPoint(let title, let pos):
+            return "\(title) in \(pos.sign.rawValue)"
+        }
+    }
+    
+    private var elementSubtitle: String {
+        switch element {
+        case .planet(let pos):
+            var sub = pos.formattedDegree
+            if let house = pos.house { sub += " • House \(house)" }
+            if pos.isRetrograde { sub += " • Retrograde" }
+            return sub
+        case .bigThree(let type, _, _):
+            switch type {
+            case "Sun": return "Your core identity"
+            case "Moon": return "Your emotional nature"
+            case "Rising": return "How you meet the world"
+            default: return ""
+            }
+        case .aspect(let asp):
+            return "\(String(format: "%.1f", asp.orb))° orb"
+        case .evolutionaryPoint(let title, let pos):
+            var sub = pos.formattedDegree
+            if let house = pos.house { sub += " • House \(house)" }
+            if title == "North Node" { sub += " • Soul's direction" }
+            else if title == "South Node" { sub += " • Past patterns" }
+            else if title == "Pluto" { sub += " • Transformation" }
+            return sub
+        }
+    }
+    
+    private var elementSymbol: String {
+        switch element {
+        case .planet(let pos):
+            return pos.planet.symbol
+        case .bigThree(let type, let sign, _):
+            switch type {
+            case "Sun": return "☉"
+            case "Moon": return "☽"
+            case "Rising": return sign.symbol
+            default: return "✧"
+            }
+        case .aspect(let asp):
+            return asp.type.symbol
+        case .evolutionaryPoint(_, let pos):
+            return pos.planet.symbol
+        }
+    }
+    
+    private var elementColor: Color {
+        switch element {
+        case .planet(let pos):
+            return colorForElement(pos.sign.element)
+        case .bigThree(_, let sign, _):
+            return colorForElement(sign.element)
+        case .aspect(let asp):
+            return colorForAspect(asp.type)
+        case .evolutionaryPoint(let title, _):
+            switch title {
+            case "North Node": return Color(red: 0.4, green: 0.7, blue: 0.5)
+            case "South Node": return Color(red: 0.7, green: 0.5, blue: 0.4)
+            default: return Color(red: 0.6, green: 0.4, blue: 0.7)
+            }
+        }
+    }
+    
+    private var formattedCurrentDate: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: Date())
+    }
+    
+    private func colorForElement(_ element: Element) -> Color {
+        switch element {
+        case .fire: return Color(red: 0.95, green: 0.5, blue: 0.4)
+        case .earth: return Color(red: 0.6, green: 0.75, blue: 0.5)
+        case .air: return Color(red: 0.5, green: 0.7, blue: 0.9)
+        case .water: return Color(red: 0.5, green: 0.55, blue: 0.85)
+        }
+    }
+    
+    private func colorForAspect(_ type: AspectType) -> Color {
+        switch type {
+        case .conjunction: return Color(red: 0.9, green: 0.8, blue: 0.4)
+        case .sextile: return Color(red: 0.4, green: 0.7, blue: 0.9)
+        case .square: return Color(red: 0.9, green: 0.4, blue: 0.4)
+        case .trine: return Color(red: 0.4, green: 0.8, blue: 0.5)
+        case .opposition: return Color(red: 0.9, green: 0.5, blue: 0.3)
+        }
+    }
+    
+    // MARK: - AI Generation
+    
+    private func generateExplanation() {
+        Task {
+            do {
+                let result = try await aiService.generateElementExplanation(
+                    element: element,
+                    chart: chart,
+                    profile: profile,
+                    contexts: contexts
+                )
+                await MainActor.run {
+                    explanation = result
+                    isLoading = false
+                }
+            } catch {
+                await MainActor.run {
+                    explanation = "Unable to generate explanation. Please try again."
+                    isLoading = false
+                }
+            }
         }
     }
 }
