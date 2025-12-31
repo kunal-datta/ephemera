@@ -48,6 +48,8 @@ struct OnboardingView: View {
     @State private var timeOfBirth = Date()
     @State private var timeOfBirthUnknown = false
     @State private var placeOfBirth = ""
+    @State private var placeOfBirthLatitude: Double?
+    @State private var placeOfBirthLongitude: Double?
     @State private var placeOfBirthUnknown = false
     
     @State private var onboardingComplete = false
@@ -117,6 +119,8 @@ struct OnboardingView: View {
                     case .placeOfBirth:
                         PlaceOfBirthInputView(
                             place: $placeOfBirth,
+                            latitude: $placeOfBirthLatitude,
+                            longitude: $placeOfBirthLongitude,
                             placeUnknown: $placeOfBirthUnknown
                         )
                     }
@@ -222,6 +226,8 @@ struct OnboardingView: View {
             timeOfBirth: timeOfBirthUnknown ? nil : timeOfBirth,
             timeOfBirthUnknown: timeOfBirthUnknown,
             placeOfBirth: placeOfBirthUnknown ? nil : placeOfBirth,
+            placeOfBirthLatitude: placeOfBirthUnknown ? nil : placeOfBirthLatitude,
+            placeOfBirthLongitude: placeOfBirthUnknown ? nil : placeOfBirthLongitude,
             placeOfBirthUnknown: placeOfBirthUnknown,
             authProvider: authProvider
         )
@@ -408,6 +414,8 @@ struct TimeOfBirthInputView: View {
 // MARK: - Place of Birth Input with Autocomplete
 struct PlaceOfBirthInputView: View {
     @Binding var place: String
+    @Binding var latitude: Double?
+    @Binding var longitude: Double?
     @Binding var placeUnknown: Bool
     @FocusState private var isFocused: Bool
     
@@ -415,6 +423,7 @@ struct PlaceOfBirthInputView: View {
     @State private var searchText = ""
     @State private var showDropdown = false
     @State private var selectedPlace: PlacePrediction?
+    @State private var isFetchingDetails = false
     
     var body: some View {
         VStack(spacing: 20) {
@@ -452,6 +461,8 @@ struct PlaceOfBirthInputView: View {
                                 Button(action: {
                                     searchText = ""
                                     place = ""
+                                    latitude = nil
+                                    longitude = nil
                                     selectedPlace = nil
                                     placesService.clearPredictions()
                                     showDropdown = false
@@ -608,6 +619,25 @@ struct PlaceOfBirthInputView: View {
         // Haptic feedback
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()
+        
+        // Fetch place details to get coordinates
+        isFetchingDetails = true
+        Task {
+            do {
+                let details = try await placesService.fetchPlaceDetails(placeId: prediction.id)
+                await MainActor.run {
+                    latitude = details.latitude
+                    longitude = details.longitude
+                    isFetchingDetails = false
+                    print("📍 Place coordinates: \(details.latitude), \(details.longitude)")
+                }
+            } catch {
+                await MainActor.run {
+                    isFetchingDetails = false
+                    print("❌ Failed to fetch place details: \(error.localizedDescription)")
+                }
+            }
+        }
     }
 }
 

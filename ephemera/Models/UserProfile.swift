@@ -17,6 +17,8 @@ final class UserProfile {
     var timeOfBirth: Date?
     var timeOfBirthUnknown: Bool
     var placeOfBirth: String?
+    var placeOfBirthLatitude: Double?
+    var placeOfBirthLongitude: Double?
     var placeOfBirthUnknown: Bool
     var authProvider: String // "google" or "email"
     var createdAt: Date
@@ -30,6 +32,8 @@ final class UserProfile {
         timeOfBirth: Date? = nil,
         timeOfBirthUnknown: Bool = false,
         placeOfBirth: String? = nil,
+        placeOfBirthLatitude: Double? = nil,
+        placeOfBirthLongitude: Double? = nil,
         placeOfBirthUnknown: Bool = false,
         authProvider: String,
         createdAt: Date = Date(),
@@ -42,6 +46,8 @@ final class UserProfile {
         self.timeOfBirth = timeOfBirth
         self.timeOfBirthUnknown = timeOfBirthUnknown
         self.placeOfBirth = placeOfBirth
+        self.placeOfBirthLatitude = placeOfBirthLatitude
+        self.placeOfBirthLongitude = placeOfBirthLongitude
         self.placeOfBirthUnknown = placeOfBirthUnknown
         self.authProvider = authProvider
         self.createdAt = createdAt

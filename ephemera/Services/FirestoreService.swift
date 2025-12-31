@@ -31,6 +31,8 @@ class FirestoreService {
             "timeOfBirth": profile.timeOfBirth.map { Timestamp(date: $0) } as Any,
             "timeOfBirthUnknown": profile.timeOfBirthUnknown,
             "placeOfBirth": profile.placeOfBirth as Any,
+            "placeOfBirthLatitude": profile.placeOfBirthLatitude as Any,
+            "placeOfBirthLongitude": profile.placeOfBirthLongitude as Any,
             "placeOfBirthUnknown": profile.placeOfBirthUnknown,
             "authProvider": profile.authProvider,
             "createdAt": Timestamp(date: profile.createdAt),
@@ -85,6 +87,8 @@ class FirestoreService {
         let timeOfBirth = (data["timeOfBirth"] as? Timestamp)?.dateValue()
         let timeOfBirthUnknown = data["timeOfBirthUnknown"] as? Bool ?? false
         let placeOfBirth = data["placeOfBirth"] as? String
+        let placeOfBirthLatitude = data["placeOfBirthLatitude"] as? Double
+        let placeOfBirthLongitude = data["placeOfBirthLongitude"] as? Double
         let placeOfBirthUnknown = data["placeOfBirthUnknown"] as? Bool ?? false
         let updatedAtTimestamp = data["updatedAt"] as? Timestamp ?? createdAtTimestamp
         
@@ -96,6 +100,8 @@ class FirestoreService {
             timeOfBirth: timeOfBirth,
             timeOfBirthUnknown: timeOfBirthUnknown,
             placeOfBirth: placeOfBirth,
+            placeOfBirthLatitude: placeOfBirthLatitude,
+            placeOfBirthLongitude: placeOfBirthLongitude,
             placeOfBirthUnknown: placeOfBirthUnknown,
             authProvider: authProvider,
             createdAt: createdAtTimestamp.dateValue(),

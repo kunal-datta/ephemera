@@ -100,6 +100,47 @@ class PlacesService: ObservableObject {
         error = nil
     }
     
+    /// Fetch place details including coordinates
+    func fetchPlaceDetails(placeId: String) async throws -> PlaceDetails {
+        guard !apiKey.isEmpty else {
+            throw PlacesError.missingApiKey
+        }
+        
+        let urlString = "https://places.googleapis.com/v1/places/\(placeId)"
+        
+        guard let url = URL(string: urlString) else {
+            throw PlacesError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue(apiKey, forHTTPHeaderField: "X-Goog-Api-Key")
+        request.setValue("displayName,formattedAddress,location", forHTTPHeaderField: "X-Goog-FieldMask")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw PlacesError.invalidResponse
+        }
+        
+        if httpResponse.statusCode != 200 {
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("❌ Places Details API response (\(httpResponse.statusCode)): \(responseString)")
+            }
+            throw PlacesError.httpError(httpResponse.statusCode)
+        }
+        
+        let result = try JSONDecoder().decode(PlaceDetailsResponse.self, from: data)
+        
+        return PlaceDetails(
+            placeId: placeId,
+            name: result.displayName?.text ?? "",
+            formattedAddress: result.formattedAddress ?? "",
+            latitude: result.location?.latitude ?? 0,
+            longitude: result.location?.longitude ?? 0
+        )
+    }
+    
     // MARK: - API Calls (Places API New)
     
     private func fetchPredictions(for query: String) async throws -> [PlacePrediction] {
@@ -193,6 +234,17 @@ private struct StructuredFormat: Codable {
 
 private struct TextValue: Codable {
     let text: String?
+}
+
+private struct PlaceDetailsResponse: Codable {
+    let displayName: TextValue?
+    let formattedAddress: String?
+    let location: LatLng?
+}
+
+private struct LatLng: Codable {
+    let latitude: Double?
+    let longitude: Double?
 }
 
 // MARK: - Errors
