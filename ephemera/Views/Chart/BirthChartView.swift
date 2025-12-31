@@ -9,12 +9,20 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct BirthChartView: View {
     let chart: BirthChart
+    @Query private var profiles: [UserProfile]
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @State private var selectedPlanet: PlanetaryPosition?
     @State private var showPlanetDetail = false
+    @State private var showProfile = false
+    
+    private var currentProfile: UserProfile? {
+        profiles.first
+    }
     
     var body: some View {
         ZStack {
@@ -76,6 +84,23 @@ struct BirthChartView: View {
                 Text("Your Birth Chart")
                     .font(.custom("Georgia", size: 18))
                     .foregroundColor(Color(red: 0.9, green: 0.87, blue: 0.82))
+            }
+            
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: { showProfile = true }) {
+                    Image(systemName: "person.circle")
+                        .font(.system(size: 22))
+                        .foregroundColor(Color(red: 0.7, green: 0.68, blue: 0.65))
+                }
+            }
+        }
+        .navigationDestination(isPresented: $showProfile) {
+            if let profile = currentProfile {
+                ProfileEditView(profile: profile) {
+                    // On profile update, delete this chart so it can be regenerated
+                    modelContext.delete(chart)
+                    dismiss()
+                }
             }
         }
         .preferredColorScheme(.dark)

@@ -343,12 +343,23 @@ class ChartCore {
     // MARK: - Helper Methods
     
     private func combineDateAndTime(date: Date, time: Date, timezone: TimeZone) -> Date {
-        var calendar = Calendar.current
-        calendar.timeZone = timezone
+        // The timeOfBirth is normalized during onboarding to contain:
+        // - The correct birth date
+        // - The correct birth location timezone
+        //
+        // We extract and recombine to ensure the date from birthDate is used
+        // with the time from timeOfBirth, all in the birth location's timezone.
         
-        let dateComponents = calendar.dateComponents([.year, .month, .day], from: date)
-        let timeComponents = calendar.dateComponents([.hour, .minute, .second], from: time)
+        var birthLocationCalendar = Calendar.current
+        birthLocationCalendar.timeZone = timezone
         
+        // Extract date components from birthDate
+        let dateComponents = birthLocationCalendar.dateComponents([.year, .month, .day], from: date)
+        
+        // Extract time components from timeOfBirth
+        let timeComponents = birthLocationCalendar.dateComponents([.hour, .minute, .second], from: time)
+        
+        // Combine date and time in birth location timezone
         var combined = DateComponents()
         combined.year = dateComponents.year
         combined.month = dateComponents.month
@@ -358,7 +369,7 @@ class ChartCore {
         combined.second = timeComponents.second
         combined.timeZone = timezone
         
-        return calendar.date(from: combined) ?? date
+        return birthLocationCalendar.date(from: combined) ?? date
     }
     
     private func setToNoon(_ date: Date, timezone: TimeZone) -> Date {

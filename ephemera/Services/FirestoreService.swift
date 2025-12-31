@@ -85,7 +85,7 @@ class FirestoreService {
             "userId": chart.userId.uuidString,
             "chartType": chart.chartType,
             "status": chart.status,
-            "errors": chart.errors,
+            "errorsJSON": chart.errorsJSON,
             "metadataJSON": chart.metadataJSON,
             "anglesJSON": chart.anglesJSON as Any,
             "housesJSON": chart.housesJSON as Any,
@@ -147,7 +147,17 @@ class FirestoreService {
             return nil
         }
         
-        let errors = data["errors"] as? [String] ?? []
+        // Handle errorsJSON - prefer new format, fall back to legacy format
+        let errorsJSON: String
+        if let storedErrorsJSON = data["errorsJSON"] as? String {
+            errorsJSON = storedErrorsJSON
+        } else if let legacyErrors = data["errors"] as? [String] {
+            // Convert legacy format to JSON
+            errorsJSON = (try? String(data: JSONEncoder().encode(legacyErrors), encoding: .utf8)) ?? "[]"
+        } else {
+            errorsJSON = "[]"
+        }
+        
         let anglesJSON = data["anglesJSON"] as? String
         let housesJSON = data["housesJSON"] as? String
         let aspectsJSON = data["aspectsJSON"] as? String
@@ -158,7 +168,7 @@ class FirestoreService {
             userId: userId,
             chartType: chartType,
             status: status,
-            errors: errors,
+            errors: [],  // Will be overwritten below
             metadata: ChartMetadata(
                 birthDate: Date(),
                 birthTimeInput: nil,
@@ -190,6 +200,7 @@ class FirestoreService {
         )
         
         // Override with actual JSON data
+        chart.errorsJSON = errorsJSON
         chart.metadataJSON = metadataJSON
         chart.anglesJSON = anglesJSON
         chart.housesJSON = housesJSON

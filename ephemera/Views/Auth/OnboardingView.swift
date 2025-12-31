@@ -224,11 +224,48 @@ struct OnboardingView: View {
     }
     
     private func saveProfile() {
+        // Normalize the timeOfBirth to use the actual birth date and birth location timezone
+        // This makes the stored data cleaner and more meaningful
+        let normalizedTimeOfBirth: Date? = {
+            guard !timeOfBirthUnknown else { return nil }
+            
+            // Get the birth location timezone, or fall back to device timezone
+            let birthTimezone: TimeZone
+            if let tzId = placeOfBirthTimezone, let tz = TimeZone(identifier: tzId) {
+                birthTimezone = tz
+            } else {
+                birthTimezone = TimeZone.current
+            }
+            
+            // Extract time components from the picker (which uses device timezone)
+            var deviceCalendar = Calendar.current
+            deviceCalendar.timeZone = TimeZone.current
+            let timeComponents = deviceCalendar.dateComponents([.hour, .minute, .second], from: timeOfBirth)
+            
+            // Extract date components from birth date
+            let dateComponents = deviceCalendar.dateComponents([.year, .month, .day], from: dateOfBirth)
+            
+            // Combine them in the birth location's timezone
+            var birthLocationCalendar = Calendar.current
+            birthLocationCalendar.timeZone = birthTimezone
+            
+            var combined = DateComponents()
+            combined.year = dateComponents.year
+            combined.month = dateComponents.month
+            combined.day = dateComponents.day
+            combined.hour = timeComponents.hour
+            combined.minute = timeComponents.minute
+            combined.second = timeComponents.second
+            combined.timeZone = birthTimezone
+            
+            return birthLocationCalendar.date(from: combined)
+        }()
+        
         let profile = UserProfile(
             name: name,
             email: email,
             dateOfBirth: dateOfBirth,
-            timeOfBirth: timeOfBirthUnknown ? nil : timeOfBirth,
+            timeOfBirth: normalizedTimeOfBirth,
             timeOfBirthUnknown: timeOfBirthUnknown,
             placeOfBirth: placeOfBirthUnknown ? nil : placeOfBirth,
             placeOfBirthLatitude: placeOfBirthUnknown ? nil : placeOfBirthLatitude,

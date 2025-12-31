@@ -304,7 +304,18 @@ final class BirthChart {
     
     // Computed status
     var status: String                  // "ok", "needs_geocoding", "error"
-    var errors: [String]
+    var errorsJSON: String              // Stored as JSON for SwiftData compatibility
+    
+    // Computed property to access errors array
+    var errors: [String] {
+        get {
+            guard let data = errorsJSON.data(using: .utf8) else { return [] }
+            return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+        }
+        set {
+            errorsJSON = (try? String(data: JSONEncoder().encode(newValue), encoding: .utf8)) ?? "[]"
+        }
+    }
     
     init(
         id: UUID = UUID(),
@@ -325,12 +336,14 @@ final class BirthChart {
         self.userId = userId
         self.chartType = chartType
         self.status = status
-        self.errors = errors
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
+        
+        // Store errors as JSON
+        self.errorsJSON = (try? String(data: encoder.encode(errors), encoding: .utf8)) ?? "[]"
         
         self.metadataJSON = (try? String(data: encoder.encode(metadata), encoding: .utf8)) ?? "{}"
         self.anglesJSON = angles.flatMap { try? String(data: encoder.encode($0), encoding: .utf8) }

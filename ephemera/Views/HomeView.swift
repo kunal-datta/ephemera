@@ -15,6 +15,7 @@ struct HomeView: View {
     
     @State private var isGeneratingChart = false
     @State private var showChart = false
+    @State private var showProfile = false
     @State private var generatedChart: BirthChart?
     @State private var errorMessage: String?
     @State private var showError = false
@@ -151,9 +152,30 @@ struct HomeView: View {
             .padding(.horizontal, 32)
         }
         .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: { showProfile = true }) {
+                    Image(systemName: "person.circle")
+                        .font(.system(size: 22))
+                        .foregroundColor(Color(red: 0.7, green: 0.68, blue: 0.65))
+                }
+                .opacity(currentProfile != nil ? 1 : 0)
+            }
+        }
         .navigationDestination(isPresented: $showChart) {
             if let chart = generatedChart ?? currentChart {
                 BirthChartView(chart: chart)
+            }
+        }
+        .navigationDestination(isPresented: $showProfile) {
+            if let profile = currentProfile {
+                ProfileEditView(profile: profile) {
+                    // On profile update, delete existing chart so it can be regenerated
+                    if let existingChart = currentChart {
+                        modelContext.delete(existingChart)
+                        generatedChart = nil
+                    }
+                }
             }
         }
         .alert("Error", isPresented: $showError) {
