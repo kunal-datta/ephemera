@@ -37,6 +37,7 @@ struct ephemeraApp: App {
             Item.self,
             UserProfile.self,
             BirthChart.self,
+            UserContext.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 

@@ -14,6 +14,7 @@ enum OnboardingStep: Int, CaseIterable {
     case dateOfBirth = 1
     case timeOfBirth = 2
     case placeOfBirth = 3
+    case lifeContext = 4
     
     var title: String {
         switch self {
@@ -21,6 +22,7 @@ enum OnboardingStep: Int, CaseIterable {
         case .dateOfBirth: return "when were you born?"
         case .timeOfBirth: return "what time were you born?"
         case .placeOfBirth: return "where were you born?"
+        case .lifeContext: return "what's on your mind?"
         }
     }
     
@@ -30,6 +32,7 @@ enum OnboardingStep: Int, CaseIterable {
         case .dateOfBirth: return "your birth date reveals your celestial blueprint"
         case .timeOfBirth: return "birth time unlocks your rising sign & houses"
         case .placeOfBirth: return "location determines your cosmic coordinates"
+        case .lifeContext: return "share what brought you here — this helps us personalize your readings"
         }
     }
 }
@@ -52,6 +55,9 @@ struct OnboardingView: View {
     @State private var placeOfBirthLongitude: Double?
     @State private var placeOfBirthTimezone: String?
     @State private var placeOfBirthUnknown = false
+    
+    // Life context
+    @State private var lifeContext = ""
     
     @State private var onboardingComplete = false
     
@@ -126,6 +132,8 @@ struct OnboardingView: View {
                             placeUnknown: $placeOfBirthUnknown,
                             birthDate: dateOfBirth
                         )
+                    case .lifeContext:
+                        LifeContextInputView(context: $lifeContext)
                     }
                 }
                 .padding(.horizontal, 32)
@@ -151,7 +159,7 @@ struct OnboardingView: View {
                     }
                     
                     Button(action: goNext) {
-                        Text(currentStep == .placeOfBirth ? "Begin Journey" : "Continue")
+                        Text(currentStep == .lifeContext ? "Begin Journey" : "Continue")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(canProceed ? Color(red: 0.05, green: 0.05, blue: 0.1) : Color.white.opacity(0.4))
                             .frame(maxWidth: .infinity)
@@ -201,6 +209,8 @@ struct OnboardingView: View {
             return true // Can always proceed (unknown is valid)
         case .placeOfBirth:
             return placeOfBirthUnknown || !placeOfBirth.trimmingCharacters(in: .whitespaces).isEmpty
+        case .lifeContext:
+            return true // Optional - can skip
         }
     }
     
@@ -309,6 +319,17 @@ struct OnboardingView: View {
         // Save to local SwiftData
         modelContext.insert(profile)
         
+        // Save life context if provided
+        if !lifeContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let context = UserContext(
+                userId: profile.id,
+                promptType: .onboarding,
+                question: "What's on your mind? What brought you to astrology?",
+                response: lifeContext.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+            modelContext.insert(context)
+        }
+        
         // Save to Firestore
         Task {
             do {
@@ -321,6 +342,71 @@ struct OnboardingView: View {
         }
         
         onboardingComplete = true
+    }
+}
+
+// MARK: - Life Context Input
+struct LifeContextInputView: View {
+    @Binding var context: String
+    @FocusState private var isFocused: Bool
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("SHARE YOUR STORY")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(Color.white.opacity(0.4))
+                .tracking(2)
+            
+            ZStack(alignment: .topLeading) {
+                TextEditor(text: $context)
+                    .font(.system(size: 16))
+                    .foregroundColor(.white)
+                    .scrollContentBackground(.hidden)
+                    .focused($isFocused)
+                    .frame(minHeight: 120, maxHeight: 180)
+                    .padding(16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color(red: 0.1, green: 0.1, blue: 0.15))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(
+                                        isFocused 
+                                            ? Color(red: 0.5, green: 0.45, blue: 0.6) 
+                                            : Color.white.opacity(0.08),
+                                        lineWidth: 1
+                                    )
+                            )
+                    )
+                
+                if context.isEmpty {
+                    Text("What's going on in your life right now? Any challenges, dreams, or questions you're sitting with...")
+                        .font(.system(size: 16))
+                        .foregroundColor(Color.white.opacity(0.25))
+                        .padding(20)
+                        .allowsHitTesting(false)
+                }
+            }
+            
+            Text("This helps us create readings that speak to your actual life, not just generic horoscopes. You can always add more later.")
+                .font(.system(size: 13))
+                .foregroundColor(Color.white.opacity(0.4))
+                .multilineTextAlignment(.leading)
+            
+            // Skip hint
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.right.circle")
+                    .font(.system(size: 12))
+                Text("Feel free to skip this for now")
+                    .font(.system(size: 12))
+            }
+            .foregroundColor(Color.white.opacity(0.3))
+        }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                isFocused = true
+            }
+        }
     }
 }
 

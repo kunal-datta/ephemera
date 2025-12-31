@@ -20,6 +20,7 @@ struct BirthChartView: View {
     @State private var selectedPlanet: PlanetaryPosition?
     @State private var showPlanetDetail = false
     @State private var showProfile = false
+    @State private var showReading = false
     @State private var shouldDismissAfterProfileUpdate = false
     
     private var currentProfile: UserProfile? {
@@ -53,6 +54,9 @@ struct BirthChartView: View {
                 VStack(spacing: 32) {
                     // Header
                     headerSection
+                    
+                    // Get Reading Button
+                    getReadingButton
                     
                     // Chart Wheel
                     chartWheelSection
@@ -110,6 +114,11 @@ struct BirthChartView: View {
                 }
             }
         }
+        .navigationDestination(isPresented: $showReading) {
+            if let profile = currentProfile {
+                ChartReadingView(chart: chart, profile: profile)
+            }
+        }
         .onChange(of: showProfile) { _, isShowing in
             // When profile view is dismissed and we need to go back to home
             if !isShowing && shouldDismissAfterProfileUpdate {
@@ -118,6 +127,69 @@ struct BirthChartView: View {
             }
         }
         .preferredColorScheme(.dark)
+    }
+    
+    // MARK: - Get Reading Button
+    
+    private var getReadingButton: some View {
+        Button(action: { showReading = true }) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.5, green: 0.45, blue: 0.65),
+                                    Color(red: 0.4, green: 0.35, blue: 0.55)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 44, height: 44)
+                    
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.white)
+                }
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Get Your Personalized Reading")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(Color(red: 0.95, green: 0.92, blue: 0.88))
+                    
+                    Text("AI-powered insights tailored to your chart & life")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(red: 0.6, green: 0.58, blue: 0.55))
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Color(red: 0.5, green: 0.48, blue: 0.55))
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color(red: 0.1, green: 0.09, blue: 0.14))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        Color(red: 0.5, green: 0.45, blue: 0.6).opacity(0.4),
+                                        Color(red: 0.4, green: 0.38, blue: 0.5).opacity(0.2)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
+            )
+        }
+        .buttonStyle(ScaleButtonStyle())
     }
     
     // MARK: - Header Section
@@ -759,6 +831,17 @@ struct ChartWheelView: View {
         case .water:
             return Color(red: 0.5, green: 0.55, blue: 0.85)
         }
+    }
+}
+
+// MARK: - Button Style
+
+struct ScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .opacity(configuration.isPressed ? 0.9 : 1.0)
+            .animation(.easeInOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 
