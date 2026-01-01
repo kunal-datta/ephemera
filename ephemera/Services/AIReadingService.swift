@@ -156,6 +156,91 @@ class AIReadingService: ObservableObject {
         }
     }
     
+    // MARK: - Generate Journal Insight
+    
+    /// Generates an insight based on journal entries and birth chart
+    func generateJournalInsight(
+        chart: BirthChart,
+        profile: UserProfile,
+        journalEntries: [UserContext]
+    ) async throws -> String {
+        let prompt = buildJournalInsightPrompt(chart: chart, profile: profile, entries: journalEntries)
+        
+        let response = try await model.generateContent(prompt)
+        
+        guard let text = response.text else {
+            throw AIReadingError.noResponse
+        }
+        
+        return text
+    }
+    
+    private func buildJournalInsightPrompt(
+        chart: BirthChart,
+        profile: UserProfile,
+        entries: [UserContext]
+    ) -> String {
+        let chartSummary = buildChartSummary(chart: chart)
+        let (latestEntry, pastSummary) = buildJournalSummaryWithLatest(entries: entries)
+        let currentDate = formatCurrentDate()
+        
+        return """
+        You are a wise, compassionate astrologer who helps people understand patterns in their life through the lens of their birth chart.
+        
+        ## Your Task
+        Write a brief, insightful reflection (3-4 sentences, about 60-80 words) that:
+        1. Acknowledges their most recent journal entry
+        2. Connects it to patterns you notice across their past entries
+        3. Ties this to something meaningful in their birth chart
+        
+        This should feel like a wise friend noticing something meaningful about where they are right now.
+        
+        ## Guidelines
+        - Start by reflecting on their latest entry — what they shared today matters
+        - Notice how it compares to or continues themes from past entries (is this new? recurring? a shift?)
+        - Connect it meaningfully to their chart (e.g., a planetary placement, aspect, or node)
+        - Be warm and personal, not clinical
+        - Don't be preachy or give unsolicited advice
+        - Write in second person ("You...")
+        - Keep it concise — quality over quantity
+        - Today is \(currentDate)
+        
+        ## Their Birth Chart
+        \(chartSummary)
+        
+        ## Their Most Recent Entry (TODAY)
+        \(latestEntry)
+        
+        ## Their Past Entries (for context)
+        \(pastSummary)
+        
+        Write your insight now. Start by acknowledging what they shared in their latest entry, then connect it to their patterns and chart.
+        """
+    }
+    
+    private func buildJournalSummaryWithLatest(entries: [UserContext]) -> (latest: String, past: String) {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .medium
+        
+        guard let latestEntry = entries.first else {
+            return ("No entries yet.", "No past entries.")
+        }
+        
+        let latestDate = dateFormatter.string(from: latestEntry.createdAt)
+        let latest = "[\(latestDate)]\n\(latestEntry.response)"
+        
+        // Get past entries (skip the first one)
+        let pastEntries = entries.dropFirst().prefix(8)
+        
+        var pastSummary = ""
+        for entry in pastEntries {
+            let date = dateFormatter.string(from: entry.createdAt)
+            pastSummary += "[\(date)]\n\(entry.response)\n\n"
+        }
+        
+        return (latest, pastSummary.isEmpty ? "This is their first entry." : pastSummary)
+    }
+    
     // MARK: - Generate Element Explanation
     
     /// Generates a personalized explanation for a specific chart element

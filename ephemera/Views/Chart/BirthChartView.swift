@@ -39,6 +39,8 @@ struct BirthChartView: View {
     @State private var showPlanetDetail = false
     @State private var showProfile = false
     @State private var showReading = false
+    @State private var showJournalEntry = false
+    @State private var showJournalHistory = false
     @State private var shouldDismissAfterProfileUpdate = false
     @State private var selectedElement: ChartElementSelection?
     
@@ -79,11 +81,15 @@ struct BirthChartView: View {
                     // Header
                     headerSection
                     
-                    // Get Reading Button
-                    getReadingButton
+                    // Journal Entry (with history link underneath)
+                    journalEntryButton
                     
                     // Chart Wheel
                     chartWheelSection
+                    
+                    // Reading link (under the chart where people expect to tap)
+                    readingLink
+                        .padding(.top, -16) // Pull it closer to chart
                     
                     // Big Three
                     bigThreeSection
@@ -163,69 +169,92 @@ struct BirthChartView: View {
                 .presentationDragIndicator(.visible)
             }
         }
+        .fullScreenCover(isPresented: $showJournalEntry) {
+            if let profile = currentProfile {
+                JournalEntryView(profile: profile) {
+                    // Entry was saved - contexts will auto-refresh via @Query
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showJournalHistory) {
+            if let profile = currentProfile {
+                JournalHistoryView(profile: profile)
+            }
+        }
     }
     
-    // MARK: - Get Reading Button
+    // MARK: - Journal Entry Button
     
-    private var getReadingButton: some View {
+    private var journalEntryCount: Int {
+        userContexts.filter { $0.promptType == ContextPromptType.journal.rawValue }.count
+    }
+    
+    private var journalEntryButton: some View {
+        VStack(spacing: 0) {
+            // Main journal action - minimal, text-forward
+            Button(action: { showJournalEntry = true }) {
+                HStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("How are you today?")
+                            .font(.system(size: 20, weight: .light))
+                            .foregroundColor(.white)
+                        
+                        Text("Add a journal entry")
+                            .font(.system(size: 13))
+                            .foregroundColor(Color.white.opacity(0.35))
+                    }
+                    
+                    Spacer()
+                    
+                    // Minimal plus icon
+                    Image(systemName: "plus")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(Color.white.opacity(0.4))
+                }
+                .padding(.vertical, 16)
+                .padding(.horizontal, 4)
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // Journal history link (directly under journal CTA)
+            if journalEntryCount > 0 {
+                Button(action: { showJournalHistory = true }) {
+                    HStack(spacing: 6) {
+                        Text("View \(journalEntryCount) past \(journalEntryCount == 1 ? "entry" : "entries")")
+                            .font(.system(size: 13))
+                        
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .medium))
+                    }
+                    .foregroundColor(Color.white.opacity(0.3))
+                    .padding(.top, 4)
+                    .padding(.leading, 4)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+    
+    // MARK: - Reading Link (appears under chart)
+    
+    private var readingLink: some View {
         Button(action: { showReading = true }) {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color(red: 0.5, green: 0.45, blue: 0.65),
-                                    Color(red: 0.4, green: 0.35, blue: 0.55)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 44, height: 44)
-                    
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.white)
-                }
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(red: 0.65, green: 0.55, blue: 0.8))
                 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Get Your Personalized Reading")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(Color(red: 0.95, green: 0.92, blue: 0.88))
-                    
-                    Text("AI-powered insights tailored to your chart & life")
-                        .font(.system(size: 12))
-                        .foregroundColor(Color(red: 0.6, green: 0.58, blue: 0.55))
-                }
-                
-                Spacer()
+                Text("Get your reading for today")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Color.white.opacity(0.5))
                 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(Color(red: 0.5, green: 0.48, blue: 0.55))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(Color.white.opacity(0.3))
             }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(red: 0.1, green: 0.09, blue: 0.14))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(
-                                LinearGradient(
-                                    colors: [
-                                        Color(red: 0.5, green: 0.45, blue: 0.6).opacity(0.4),
-                                        Color(red: 0.4, green: 0.38, blue: 0.5).opacity(0.2)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1
-                            )
-                    )
-            )
         }
-        .buttonStyle(ScaleButtonStyle())
+        .buttonStyle(PlainButtonStyle())
     }
     
     // MARK: - Header Section
