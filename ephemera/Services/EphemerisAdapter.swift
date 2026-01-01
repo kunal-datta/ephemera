@@ -122,12 +122,13 @@ class EphemerisAdapter {
     
     /// Get house cusps and angles for a given date and location
     /// Returns nil if location data is missing
+    /// Uses Placidus house system by default
     func getHouseCusps(date: Date, latitude: Double, longitude: Double) -> (houses: [House], angles: ChartAngles)? {
         let cusps = HouseCusps(
             date: date,
             latitude: latitude,
             longitude: longitude,
-            houseSystem: .wholeSign
+            houseSystem: .placidus
         )
         
         // Get Ascendant - using the tropical property
@@ -201,15 +202,30 @@ class EphemerisAdapter {
             imumCoeli: imumCoeli
         )
         
-        // Build Whole Sign houses based on Ascendant
-        let risingSignIndex = ascSign.index
+        // Build Placidus houses from cusps
+        // The HouseCusps object provides the actual cusp degrees for each house
         var houses: [House] = []
+        
+        // Get cusp longitudes from the HouseCusps object
+        let cuspLongitudes = [
+            cusps.first.tropical.value,
+            cusps.second.tropical.value,
+            cusps.third.tropical.value,
+            cusps.fourth.tropical.value,
+            cusps.fifth.tropical.value,
+            cusps.sixth.tropical.value,
+            cusps.seventh.tropical.value,
+            cusps.eighth.tropical.value,
+            cusps.ninth.tropical.value,
+            cusps.tenth.tropical.value,
+            cusps.eleventh.tropical.value,
+            cusps.twelfth.tropical.value
+        ]
         
         for i in 0..<12 {
             let houseNumber = i + 1
-            let signIndex = (risingSignIndex + i) % 12
-            let sign = ZodiacSign.allCases[signIndex]
-            let cuspDegree = Double(signIndex * 30)
+            let cuspDegree = cuspLongitudes[i]
+            let sign = ZodiacSign.from(longitude: cuspDegree)
             
             houses.append(House(
                 number: houseNumber,

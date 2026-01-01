@@ -139,7 +139,7 @@ class ChartCore {
             latitude: input.latitude,
             longitude: input.longitude,
             timezone: input.timezone,
-            houseSystem: "WHOLE_SIGN",
+            houseSystem: "PLACIDUS",
             nodeType: input.nodeType.rawValue,
             utcDateTimeUsed: utcDate,
             julianDay: nil,  // Could calculate this if needed
@@ -223,7 +223,7 @@ class ChartCore {
         }
     }
     
-    // MARK: - House Assignment (Whole Sign)
+    // MARK: - House Assignment (Placidus)
     
     private func assignHousesToPlanets(planets: [PlanetaryPosition], risingSign: ZodiacSign) -> [PlanetaryPosition] {
         let risingSignIndex = risingSign.index
@@ -319,7 +319,7 @@ class ChartCore {
         let moon = planets.first { $0.planet == .moon }
         let sun = planets.first { $0.planet == .sun }
         
-        var notes: [String] = ["Whole Sign houses used"]
+        var notes: [String] = ["Placidus houses used"]
         
         if chartType != .fullNatal {
             notes.append("Houses omitted when birth time/place unknown")

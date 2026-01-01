@@ -35,18 +35,36 @@ enum ZodiacSign: String, Codable, CaseIterable {
     
     var symbol: String {
         switch self {
-        case .aries: return "♈"
-        case .taurus: return "♉"
-        case .gemini: return "♊"
-        case .cancer: return "♋"
-        case .leo: return "♌"
-        case .virgo: return "♍"
-        case .libra: return "♎"
-        case .scorpio: return "♏"
-        case .sagittarius: return "♐"
-        case .capricorn: return "♑"
-        case .aquarius: return "♒"
-        case .pisces: return "♓"
+        case .aries: return "♈︎"
+        case .taurus: return "♉︎"
+        case .gemini: return "♊︎"
+        case .cancer: return "♋︎"
+        case .leo: return "♌︎"
+        case .virgo: return "♍︎"
+        case .libra: return "♎︎"
+        case .scorpio: return "♏︎"
+        case .sagittarius: return "♐︎"
+        case .capricorn: return "♑︎"
+        case .aquarius: return "♒︎"
+        case .pisces: return "♓︎"
+        }
+    }
+    
+    /// Elegant text-based glyph for refined UI display
+    var glyph: String {
+        switch self {
+        case .aries: return "Ari"
+        case .taurus: return "Tau"
+        case .gemini: return "Gem"
+        case .cancer: return "Can"
+        case .leo: return "Leo"
+        case .virgo: return "Vir"
+        case .libra: return "Lib"
+        case .scorpio: return "Sco"
+        case .sagittarius: return "Sag"
+        case .capricorn: return "Cap"
+        case .aquarius: return "Aqu"
+        case .pisces: return "Pis"
         }
     }
     

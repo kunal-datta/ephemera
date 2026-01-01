@@ -278,7 +278,7 @@ struct BirthChartView: View {
         case "SIGN_BASED_NO_HOUSES":
             return "Sign-Based Chart"
         default:
-            return "Whole Sign Houses"
+            return "Placidus Houses"
         }
     }
     
@@ -484,17 +484,17 @@ struct BirthChartView: View {
     // MARK: - Evolutionary Core Section
     
     private var evolutionaryCoreSection: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 20) {
             Text("EVOLUTIONARY ASTROLOGY")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(Color(red: 0.6, green: 0.58, blue: 0.55))
                 .tracking(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
             
             if let evoCore = chart.evolutionaryCore {
-                VStack(spacing: 12) {
-                    // Nodes row
-                    HStack(spacing: 16) {
+                VStack(spacing: 16) {
+                    // Nodes row - using grid for equal sizing
+                    HStack(spacing: 12) {
                         if let northNode = evoCore.northNode {
                             evolutionaryCard(
                                 title: "North Node",
@@ -520,14 +520,13 @@ struct BirthChartView: View {
                         }
                     }
                     
-                    // Pluto
+                    // Pluto - centered, matching width of nodes
                     if let pluto = evoCore.pluto {
                         evolutionaryCard(
                             title: "Pluto",
                             subtitle: "Soul's Evolution",
                             position: pluto,
-                            color: Color(red: 0.6, green: 0.4, blue: 0.7),
-                            fullWidth: true
+                            color: Color(red: 0.6, green: 0.4, blue: 0.7)
                         )
                         .onTapGesture {
                             selectedElement = .evolutionaryPoint(title: "Pluto", position: pluto)
@@ -537,28 +536,24 @@ struct BirthChartView: View {
                 
                 // Notes
                 if !evoCore.notes.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(evoCore.notes, id: \.self) { note in
                             HStack(spacing: 6) {
-                                Circle()
-                                    .fill(Color(red: 0.5, green: 0.45, blue: 0.6))
-                                    .frame(width: 4, height: 4)
+                        ForEach(evoCore.notes, id: \.self) { note in
                                 Text(note)
-                                    .font(.system(size: 11))
-                                    .foregroundColor(Color(red: 0.5, green: 0.48, blue: 0.45))
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(Color(red: 0.5, green: 0.48, blue: 0.52))
                             }
                         }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 4)
                     }
-                    .padding(.top, 8)
                 }
             }
-        }
-        .padding(16)
+        .padding(20)
         .background(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: 20)
                 .fill(Color(red: 0.06, green: 0.06, blue: 0.1))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16)
+                    RoundedRectangle(cornerRadius: 20)
                         .stroke(
                             LinearGradient(
                                 colors: [
@@ -574,40 +569,52 @@ struct BirthChartView: View {
         )
     }
     
-    private func evolutionaryCard(title: String, subtitle: String, position: PlanetaryPosition, color: Color, fullWidth: Bool = false) -> some View {
-        HStack(spacing: 12) {
-            Circle()
-                .fill(color.opacity(0.2))
-                .frame(width: 44, height: 44)
-                .overlay(
-                    Text(position.planet.symbol)
-                        .font(.system(size: 20))
-                        .foregroundColor(color)
-                )
+    private func evolutionaryCard(title: String, subtitle: String, position: PlanetaryPosition, color: Color) -> some View {
+        VStack(spacing: 8) {
+            // Zodiac symbol (same as chart wheel)
+            Text(position.sign.symbol)
+                .font(.system(size: 28))
+                .foregroundColor(color)
             
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(Color(red: 0.85, green: 0.82, blue: 0.78))
-                
-                Text("\(position.sign.rawValue) \(position.formattedDegree)")
-                    .font(.system(size: 12))
-                    .foregroundColor(color)
-                
-                Text(subtitle)
-                    .font(.system(size: 10))
-                    .foregroundColor(Color(red: 0.5, green: 0.48, blue: 0.45))
-            }
+            // Title
+            Text(title.uppercased())
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(Color(red: 0.6, green: 0.58, blue: 0.55))
+                .tracking(1)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
             
-            if fullWidth {
-                Spacer()
-            }
+            // Sign name
+            Text(position.sign.rawValue)
+                .font(.custom("Georgia", size: 15))
+                .foregroundColor(Color(red: 0.9, green: 0.87, blue: 0.82))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            
+            // Degree
+            Text(position.formattedDegree)
+                .font(.system(size: 11))
+                .foregroundColor(color.opacity(0.8))
+                .lineLimit(1)
+            
+            // Subtitle
+            Text(subtitle)
+                .font(.system(size: 9))
+                .foregroundColor(Color(red: 0.5, green: 0.48, blue: 0.45))
+                .italic()
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
-        .padding(12)
-        .frame(maxWidth: fullWidth ? .infinity : nil, alignment: .leading)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 8)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(color.opacity(0.05))
+            RoundedRectangle(cornerRadius: 14)
+                .fill(color.opacity(0.06))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(color.opacity(0.15), lineWidth: 1)
+                )
         )
         .contentShape(Rectangle())
     }
@@ -1156,7 +1163,7 @@ struct ScaleButtonStyle: ButtonStyle {
                 latitude: 40.7128,
                 longitude: -74.0060,
                 timezone: "America/New_York",
-                houseSystem: "WHOLE_SIGN",
+                houseSystem: "PLACIDUS",
                 nodeType: "true",
                 utcDateTimeUsed: Date(),
                 julianDay: nil,
@@ -1179,7 +1186,7 @@ struct ScaleButtonStyle: ButtonStyle {
                 moon: nil,
                 sun: nil,
                 risingSign: .aries,
-                notes: ["Whole Sign houses used"]
+                notes: ["Placidus houses used"]
             )
         )
         

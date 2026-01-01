@@ -208,7 +208,7 @@ class FirestoreService {
                 latitude: nil,
                 longitude: nil,
                 timezone: nil,
-                houseSystem: "WHOLE_SIGN",
+                houseSystem: "PLACIDUS",
                 nodeType: "true",
                 utcDateTimeUsed: nil,
                 julianDay: nil,

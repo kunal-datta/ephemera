@@ -317,7 +317,7 @@ struct ChartReadingView: View {
                 latitude: 40.7128,
                 longitude: -74.0060,
                 timezone: "America/New_York",
-                houseSystem: "WHOLE_SIGN",
+                houseSystem: "PLACIDUS",
                 nodeType: "true",
                 utcDateTimeUsed: Date(),
                 julianDay: nil,
