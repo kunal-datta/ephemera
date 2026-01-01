@@ -40,9 +40,9 @@ struct BirthChartView: View {
     @State private var showProfile = false
     @State private var showReading = false
     @State private var showJournalEntry = false
-    @State private var showJournalHistory = false
     @State private var shouldDismissAfterProfileUpdate = false
     @State private var selectedElement: ChartElementSelection?
+    @State private var selectedTab: Int = 0 // 0 = Chart, 1 = Journal
     
     private var currentProfile: UserProfile? {
         profiles.first
@@ -51,6 +51,12 @@ struct BirthChartView: View {
     private var userContexts: [UserContext] {
         guard let profile = currentProfile else { return [] }
         return contexts.filter { $0.userId == profile.id }
+    }
+    
+    private var journalContexts: [UserContext] {
+        userContexts
+            .filter { $0.promptType == ContextPromptType.journal.rawValue }
+            .sorted { $0.createdAt > $1.createdAt }
     }
     
     // Use the latest chart from SwiftData, falling back to initial chart
@@ -76,39 +82,18 @@ struct BirthChartView: View {
             StarFieldView()
                 .opacity(0.25)
             
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 32) {
-                    // Header
-                    headerSection
-                    
-                    // Journal Entry (with history link underneath)
-                    journalEntryButton
-                    
-                    // Chart Wheel
-                    chartWheelSection
-                    
-                    // Reading link (under the chart where people expect to tap)
-                    readingLink
-                        .padding(.top, -16) // Pull it closer to chart
-                    
-                    // Big Three
-                    bigThreeSection
-                    
-                    // Planetary Placements
-                    planetaryPlacementsSection
-                    
-                    // Evolutionary Core
-                    evolutionaryCoreSection
-                    
-                    // Aspects (if available)
-                    if let aspects = chart.aspects, !aspects.isEmpty {
-                        aspectsSection(aspects: aspects)
-                    }
-                    
-                    Spacer(minLength: 40)
+            VStack(spacing: 0) {
+                // Segmented Control
+                segmentedControl
+                    .padding(.top, 12)
+                    .padding(.bottom, 16)
+                
+                // Content based on selected tab
+                if selectedTab == 0 {
+                    chartContent
+                } else {
+                    journalContent
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 20)
             }
         }
         .navigationBarBackButtonHidden(true)
@@ -176,65 +161,217 @@ struct BirthChartView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $showJournalHistory) {
-            if let profile = currentProfile {
-                JournalHistoryView(profile: profile)
+    }
+    
+    // MARK: - Segmented Control
+    
+    private var segmentedControl: some View {
+        HStack(spacing: 0) {
+            segmentButton(title: "Chart", icon: "circle.hexagongrid", index: 0)
+            segmentButton(title: "Journal", icon: "book", index: 1)
+        }
+        .padding(3)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.white.opacity(0.06))
+        )
+        .padding(.horizontal, 24)
+    }
+    
+    private func segmentButton(title: String, icon: String, index: Int) -> some View {
+        let isSelected = selectedTab == index
+        
+        return Button(action: {
+            withAnimation(.easeOut(duration: 0.2)) {
+                selectedTab = index
             }
+        }) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .medium))
+                Text(title)
+                    .font(.system(size: 14, weight: .medium))
+            }
+            .foregroundColor(isSelected ? .white : Color.white.opacity(0.4))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isSelected ? Color.white.opacity(0.12) : Color.clear)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    // MARK: - Chart Content
+    
+    private var chartContent: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 32) {
+                // Header
+                headerSection
+                
+                // Chart Wheel
+                chartWheelSection
+                
+                // Reading link (under the chart where people expect to tap)
+                readingLink
+                    .padding(.top, -16) // Pull it closer to chart
+                
+                // Big Three
+                bigThreeSection
+                
+                // Planetary Placements
+                planetaryPlacementsSection
+                
+                // Evolutionary Core
+                evolutionaryCoreSection
+                
+                // Aspects (if available)
+                if let aspects = chart.aspects, !aspects.isEmpty {
+                    aspectsSection(aspects: aspects)
+                }
+                
+                Spacer(minLength: 40)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 8)
         }
     }
     
-    // MARK: - Journal Entry Button
+    // MARK: - Journal Content
     
-    private var journalEntryCount: Int {
-        userContexts.filter { $0.promptType == ContextPromptType.journal.rawValue }.count
+    private var journalContent: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 20) {
+                // Add new entry button
+                journalAddEntryButton
+                
+                // Journal entries list
+                if journalContexts.isEmpty {
+                    journalEmptyState
+                } else {
+                    // Stats row
+                    journalStatsRow
+                    
+                    // Entries
+                    LazyVStack(spacing: 12) {
+                        ForEach(journalContexts, id: \.id) { entry in
+                            EntryCard(entry: entry)
+                        }
+                    }
+                }
+                
+                Spacer(minLength: 40)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 8)
+        }
     }
     
-    private var journalEntryButton: some View {
-        VStack(spacing: 0) {
-            // Main journal action - minimal, text-forward
-            Button(action: { showJournalEntry = true }) {
-                HStack(spacing: 0) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("How are you today?")
-                            .font(.system(size: 20, weight: .light))
-                            .foregroundColor(.white)
-                        
-                        Text("Add a journal entry")
-                            .font(.system(size: 13))
-                            .foregroundColor(Color.white.opacity(0.35))
-                    }
+    private var journalAddEntryButton: some View {
+        Button(action: { showJournalEntry = true }) {
+            HStack(spacing: 12) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 22))
+                    .foregroundColor(Color.white.opacity(0.6))
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("New Entry")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundColor(Color.white.opacity(0.9))
                     
-                    Spacer()
-                    
-                    // Minimal plus icon
-                    Image(systemName: "plus")
-                        .font(.system(size: 16, weight: .medium))
+                    Text("How are you feeling today?")
+                        .font(.system(size: 13))
                         .foregroundColor(Color.white.opacity(0.4))
                 }
-                .padding(.vertical, 16)
-                .padding(.horizontal, 4)
-            }
-            .buttonStyle(PlainButtonStyle())
-            
-            // Journal history link (directly under journal CTA)
-            if journalEntryCount > 0 {
-                Button(action: { showJournalHistory = true }) {
-                    HStack(spacing: 6) {
-                        Text("View \(journalEntryCount) past \(journalEntryCount == 1 ? "entry" : "entries")")
-                            .font(.system(size: 13))
-                        
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 10, weight: .medium))
-                    }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundColor(Color.white.opacity(0.3))
-                    .padding(.top, 4)
-                    .padding(.leading, 4)
-                }
-                .buttonStyle(PlainButtonStyle())
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .padding(18)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.white.opacity(0.04))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private var journalEmptyState: some View {
+        VStack(spacing: 16) {
+            Spacer()
+                .frame(height: 60)
+            
+            Image(systemName: "book.closed")
+                .font(.system(size: 44, weight: .light))
+                .foregroundColor(Color.white.opacity(0.25))
+            
+            Text("No entries yet")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundColor(.white)
+            
+            Text("Start journaling to track your patterns\nand get personalized insights")
+                .font(.system(size: 14))
+                .foregroundColor(Color.white.opacity(0.4))
+                .multilineTextAlignment(.center)
+            
+            Spacer()
         }
     }
+    
+    private var journalStatsRow: some View {
+        HStack(spacing: 12) {
+            JournalStatCard(value: "\(journalContexts.count)", label: "Entries")
+            JournalStatCard(value: calculateStreak(), label: "Streak")
+            JournalStatCard(value: "\(uniqueJournalDays())", label: "Days")
+        }
+    }
+    
+    private func uniqueJournalDays() -> Int {
+        let calendar = Calendar.current
+        let uniqueDates = Set(journalContexts.map { calendar.startOfDay(for: $0.createdAt) })
+        return uniqueDates.count
+    }
+    
+    private func calculateStreak() -> String {
+        guard !journalContexts.isEmpty else { return "0" }
+        
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+        
+        var datesWithEntries = Set<Date>()
+        for entry in journalContexts {
+            datesWithEntries.insert(calendar.startOfDay(for: entry.createdAt))
+        }
+        
+        var streak = 0
+        var checkDate: Date
+        
+        if datesWithEntries.contains(today) {
+            checkDate = today
+        } else if datesWithEntries.contains(yesterday) {
+            checkDate = yesterday
+        } else {
+            return "0"
+        }
+        
+        while datesWithEntries.contains(checkDate) {
+            streak += 1
+            checkDate = calendar.date(byAdding: .day, value: -1, to: checkDate) ?? checkDate
+        }
+        
+        return "\(streak)"
+    }
+    
     
     // MARK: - Reading Link (appears under chart)
     
@@ -1203,6 +1340,35 @@ struct ChartWheelButtonStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
             .opacity(configuration.isPressed ? 0.85 : 1.0)
             .animation(.easeInOut(duration: 0.2), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Journal Stat Card
+
+struct JournalStatCard: View {
+    let value: String
+    let label: String
+    
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundColor(.white)
+            
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundColor(Color.white.opacity(0.4))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.white.opacity(0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                )
+        )
     }
 }
 
