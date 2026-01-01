@@ -1005,6 +1005,21 @@ struct ChartElementDetailSheet: View {
             }
             .foregroundColor(Color(red: 0.5, green: 0.45, blue: 0.6))
             
+            markdownText(text)
+        }
+    }
+    
+    /// Renders markdown text with proper styling for bold, italic, and bullet points
+    @ViewBuilder
+    private func markdownText(_ text: String) -> some View {
+        if let attributedString = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+            Text(attributedString)
+                .font(.system(size: 15))
+                .foregroundColor(Color(red: 0.8, green: 0.78, blue: 0.75))
+                .lineSpacing(6)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            // Fallback to plain text if markdown parsing fails
             Text(text)
                 .font(.system(size: 15))
                 .foregroundColor(Color(red: 0.8, green: 0.78, blue: 0.75))

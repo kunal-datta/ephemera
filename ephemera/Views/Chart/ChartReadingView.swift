@@ -23,6 +23,7 @@ struct ChartReadingView: View {
     @State private var showError = false
     @State private var expandedSections: Set<UUID> = []
     @State private var hasAppeared = false
+    @State private var currentCardIndex = 0
     
     // Filter contexts for this user
     private var userContexts: [UserContext] {
@@ -140,26 +141,51 @@ struct ChartReadingView: View {
     // MARK: - Reading Content
     
     private func readingContent(_ reading: AIReading) -> some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 24) {
-                // Header
-                headerSection
-                
-                // Reading sections
-                if !reading.sections.isEmpty {
-                    ForEach(reading.sections) { section in
-                        sectionCard(section)
+        VStack(spacing: 0) {
+            // Header at top
+            headerSection
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 16)
+            
+            // Swipeable cards
+            if !reading.sections.isEmpty {
+                TabView(selection: $currentCardIndex) {
+                    ForEach(Array(reading.sections.enumerated()), id: \.element.id) { index, section in
+                        swipeableSectionCard(section, index: index, total: reading.sections.count)
+                            .tag(index)
                     }
-                } else {
-                    // Fallback: show raw content if parsing failed
-                    rawContentCard(reading.content)
                 }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .animation(.easeInOut(duration: 0.3), value: currentCardIndex)
                 
-                Spacer(minLength: 40)
+                // Custom page indicator
+                pageIndicator(total: reading.sections.count)
+                    .padding(.bottom, 40)
+            } else {
+                // Fallback: show raw content if parsing failed
+                ScrollView(showsIndicators: false) {
+                    rawContentCard(reading.content)
+                        .padding(.horizontal, 20)
+                }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
         }
+    }
+    
+    // MARK: - Page Indicator
+    
+    private func pageIndicator(total: Int) -> some View {
+        HStack(spacing: 8) {
+            ForEach(0..<total, id: \.self) { index in
+                Capsule()
+                    .fill(index == currentCardIndex 
+                        ? Color(red: 0.7, green: 0.65, blue: 0.8) 
+                        : Color.white.opacity(0.2))
+                    .frame(width: index == currentCardIndex ? 24 : 8, height: 8)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: currentCardIndex)
+            }
+        }
+        .padding(.top, 16)
     }
     
     private var headerSection: some View {
@@ -193,47 +219,87 @@ struct ChartReadingView: View {
         .padding(.bottom, 8)
     }
     
-    private func sectionCard(_ section: ReadingSection) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Section header
-            HStack {
-                Text(cleanSectionTitle(section.title))
-                    .font(.custom("Georgia", size: 18))
-                    .foregroundColor(Color(red: 0.9, green: 0.87, blue: 0.82))
+    private func swipeableSectionCard(_ section: ReadingSection, index: Int, total: Int) -> some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 16) {
+                // Card number indicator
+                HStack {
+                    Text("\(index + 1) of \(total)")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(Color(red: 0.5, green: 0.48, blue: 0.55))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule()
+                                .fill(Color.white.opacity(0.05))
+                        )
+                    
+                    Spacer()
+                }
                 
-                Spacer()
+                // Section header
+                Text(cleanSectionTitle(section.title))
+                    .font(.custom("Georgia", size: 22))
+                    .foregroundColor(Color(red: 0.95, green: 0.92, blue: 0.88))
+                
+                // Section body with markdown rendering
+                markdownText(section.body)
+                
+                Spacer(minLength: 20)
             }
-            
-            // Section body
-            Text(section.body)
+            .padding(24)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color(red: 0.08, green: 0.08, blue: 0.12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.1),
+                                    Color.white.opacity(0.02)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
+                .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 10)
+        )
+        .padding(.horizontal, 20)
+        .padding(.vertical, 8)
+    }
+    
+    private func rawContentCard(_ content: String) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            markdownText(content)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(red: 0.08, green: 0.08, blue: 0.12))
+        )
+    }
+    
+    /// Renders markdown text with proper styling for bold, italic, and bullet points
+    @ViewBuilder
+    private func markdownText(_ text: String) -> some View {
+        if let attributedString = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+            Text(attributedString)
+                .font(.system(size: 15, weight: .regular))
+                .foregroundColor(Color(red: 0.75, green: 0.73, blue: 0.70))
+                .lineSpacing(6)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            // Fallback to plain text if markdown parsing fails
+            Text(text)
                 .font(.system(size: 15, weight: .regular))
                 .foregroundColor(Color(red: 0.75, green: 0.73, blue: 0.70))
                 .lineSpacing(6)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(red: 0.08, green: 0.08, blue: 0.12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.05), lineWidth: 1)
-                )
-        )
-    }
-    
-    private func rawContentCard(_ content: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(content)
-                .font(.system(size: 15, weight: .regular))
-                .foregroundColor(Color(red: 0.75, green: 0.73, blue: 0.70))
-                .lineSpacing(6)
-        }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(red: 0.08, green: 0.08, blue: 0.12))
-        )
     }
     
     // MARK: - Error View
