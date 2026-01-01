@@ -63,6 +63,40 @@ struct ReadingSection: Identifiable {
     let id = UUID()
     let title: String
     let body: String
+    
+    /// Chart elements this section relates to (for highlighting on the chart)
+    var relatedPlanets: [Planet] {
+        // Map section titles to relevant planets
+        let lowercasedTitle = title.lowercased()
+        
+        if lowercasedTitle.contains("core") || lowercasedTitle.contains("identity") || lowercasedTitle.contains("sun") {
+            return [.sun]
+        } else if lowercasedTitle.contains("emotional") || lowercasedTitle.contains("moon") || lowercasedTitle.contains("inner") {
+            return [.moon]
+        } else if lowercasedTitle.contains("meet the world") || lowercasedTitle.contains("rising") || lowercasedTitle.contains("ascendant") {
+            return [] // Rising is not a planet, handled separately
+        } else if lowercasedTitle.contains("soul") || lowercasedTitle.contains("journey") || lowercasedTitle.contains("evolution") {
+            return [.northNode, .southNode, .pluto]
+        } else if lowercasedTitle.contains("alive") || lowercasedTitle.contains("now") || lowercasedTitle.contains("transit") {
+            // Current transits - highlight outer planets typically involved
+            return [.saturn, .jupiter, .uranus, .neptune, .pluto]
+        } else if lowercasedTitle.contains("blueprint") || lowercasedTitle.contains("cosmic") {
+            // Overview section - highlight the big three
+            return [.sun, .moon]
+        } else if lowercasedTitle.contains("message") || lowercasedTitle.contains("closing") {
+            return [] // No specific highlight for closing
+        }
+        
+        return []
+    }
+    
+    /// Whether this section relates to the rising sign
+    var relatestoRising: Bool {
+        let lowercasedTitle = title.lowercased()
+        return lowercasedTitle.contains("meet the world") || 
+               lowercasedTitle.contains("rising") || 
+               lowercasedTitle.contains("ascendant")
+    }
 }
 
 @MainActor
