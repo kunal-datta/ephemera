@@ -232,8 +232,14 @@ struct JournalHistoryView: View {
                 // Mood breakdown
                 moodBreakdown
                 
+                // Mood patterns over time chart
+                moodPatternsOverTimeChart
+                
                 // Focus areas
                 focusAreasBreakdown
+                
+                // Focus areas over time chart
+                focusAreasOverTimeChart
                 
                 // AI Insight
                 aiInsightCard
@@ -265,77 +271,32 @@ struct JournalHistoryView: View {
                 
                 Spacer()
                 
-                Text("Last 8 weeks")
+                Text("Last 4 weeks")
                     .font(.system(size: 11))
                     .foregroundColor(Color.white.opacity(0.3))
             }
             
             // Calendar grid - 8 weeks x 7 days
-            let allDays = generateAllDays()
-            
-            VStack(alignment: .leading, spacing: 4) {
-                // Day labels row
-                HStack(spacing: 4) {
-                    Text("")
-                        .frame(width: 16)
-                    
-                    ForEach(["S", "M", "T", "W", "T", "F", "S"], id: \.self) { day in
-                        Text(day)
-                            .font(.system(size: 8, weight: .medium))
-                            .foregroundColor(Color.white.opacity(0.25))
-                            .frame(width: 14)
-                    }
-                }
-                
-                // Week rows
-                ForEach(0..<8, id: \.self) { weekIndex in
-                    HStack(spacing: 4) {
-                        // Week number or empty
-                        if weekIndex == 0 {
-                            Text("Now")
-                                .font(.system(size: 7))
-                                .foregroundColor(Color.white.opacity(0.25))
-                                .frame(width: 16, alignment: .trailing)
-                        } else {
-                            Text("")
-                                .frame(width: 16)
-                        }
-                        
-                        // 7 days in the week
-                        ForEach(0..<7, id: \.self) { dayIndex in
-                            let index = weekIndex * 7 + dayIndex
-                            if index < allDays.count {
-                                let dayData = allDays[index]
-                                
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(dayData.isFuture 
-                                          ? Color.white.opacity(0.02)
-                                          : activityColor(for: dayData.count))
-                                    .frame(width: 14, height: 14)
-                            } else {
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(Color.white.opacity(0.02))
-                                    .frame(width: 14, height: 14)
-                            }
-                        }
-                    }
-                }
-            }
+            ActivityCalendarGrid(
+                allDays: generateAllDays(),
+                activityColorProvider: activityColor
+            )
+            .frame(height: 220)
             
             // Legend
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 Text("Less")
-                    .font(.system(size: 9))
+                    .font(.system(size: 10))
                     .foregroundColor(Color.white.opacity(0.3))
                 
                 ForEach(0..<5, id: \.self) { level in
-                    RoundedRectangle(cornerRadius: 2)
+                    RoundedRectangle(cornerRadius: 3)
                         .fill(activityColor(for: level))
-                        .frame(width: 10, height: 10)
+                        .frame(width: 14, height: 14)
                 }
                 
                 Text("More")
-                    .font(.system(size: 9))
+                    .font(.system(size: 10))
                     .foregroundColor(Color.white.opacity(0.3))
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -351,13 +312,7 @@ struct JournalHistoryView: View {
         )
     }
     
-    private struct DayData: Hashable {
-        let date: Date
-        let count: Int
-        let isFuture: Bool
-    }
-    
-    private func generateAllDays() -> [DayData] {
+    private func generateAllDays() -> [ActivityDayData] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
         
@@ -367,18 +322,18 @@ struct JournalHistoryView: View {
         // Calculate start of this week (Sunday)
         let startOfThisWeek = calendar.date(byAdding: .day, value: -(todayWeekday - 1), to: today)!
         
-        // Go back 7 more weeks (8 weeks total including current)
-        let startDate = calendar.date(byAdding: .day, value: -49, to: startOfThisWeek)!
+        // Go back 3 more weeks (4 weeks total including current)
+        let startDate = calendar.date(byAdding: .day, value: -21, to: startOfThisWeek)!
         
-        var days: [DayData] = []
+        var days: [ActivityDayData] = []
         
-        // Generate 56 days (8 weeks)
-        for dayOffset in 0..<56 {
+        // Generate 28 days (4 weeks)
+        for dayOffset in 0..<28 {
             let date = calendar.date(byAdding: .day, value: dayOffset, to: startDate)!
             let count = entriesOnDate(date)
             let isFuture = date > today
             
-            days.append(DayData(date: date, count: count, isFuture: isFuture))
+            days.append(ActivityDayData(date: date, count: count, isFuture: isFuture))
         }
         
         return days
@@ -475,6 +430,43 @@ struct JournalHistoryView: View {
         )
     }
     
+    // MARK: - Mood Patterns Over Time Chart
+    
+    private var moodPatternsOverTimeChart: some View {
+        let timeData = calculateMoodOverTime()
+        let topMoods = getTopMoods(from: timeData, limit: 4)
+        
+        return VStack(alignment: .leading, spacing: 16) {
+            Text("Mood patterns over time")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(Color.white.opacity(0.5))
+            
+            if timeData.isEmpty {
+                Text("Add more entries to see trends")
+                    .font(.system(size: 13))
+                    .foregroundColor(Color.white.opacity(0.3))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 30)
+            } else {
+                MoodOverTimeChartContent(
+                    timeData: timeData,
+                    topMoods: topMoods,
+                    moodColorProvider: moodColor,
+                    formatDate: formatShortDate
+                )
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white.opacity(0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                )
+        )
+    }
+    
     // MARK: - Focus Areas Breakdown
     
     private var focusAreasBreakdown: some View {
@@ -509,6 +501,43 @@ struct JournalHistoryView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white.opacity(0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                )
+        )
+    }
+    
+    // MARK: - Focus Areas Over Time Chart
+    
+    private var focusAreasOverTimeChart: some View {
+        let timeData = calculateFocusAreasOverTime()
+        let topAreas = getTopAreas(from: timeData, limit: 5)
+        
+        return VStack(alignment: .leading, spacing: 16) {
+            Text("Focus areas over time")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(Color.white.opacity(0.5))
+            
+            if timeData.isEmpty {
+                Text("Add more entries to see trends")
+                    .font(.system(size: 13))
+                    .foregroundColor(Color.white.opacity(0.3))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 30)
+            } else {
+                FocusAreasOverTimeChartContent(
+                    timeData: timeData,
+                    topAreas: topAreas,
+                    areaColorProvider: areaColor,
+                    formatDate: formatShortDate
+                )
+            }
+        }
         .padding(20)
         .background(
             RoundedRectangle(cornerRadius: 16)
@@ -720,6 +749,165 @@ struct JournalHistoryView: View {
         
         return "\(streak)"
     }
+    
+    // MARK: - Over Time Data Calculations
+    
+    private func calculateMoodOverTime() -> [DayMoodChartData] {
+        let calendar = Calendar.current
+        
+        // Group entries by day
+        var dayData: [Date: [String: Int]] = [:]
+        
+        for entry in userContexts {
+            let day = calendar.startOfDay(for: entry.createdAt)
+            if dayData[day] == nil {
+                dayData[day] = [:]
+            }
+            
+            // Extract moods from entry
+            if let response = entry.response.range(of: "Moods: ") {
+                let afterMoods = entry.response[response.upperBound...]
+                if let periodIndex = afterMoods.firstIndex(of: ".") {
+                    let moodsString = String(afterMoods[..<periodIndex])
+                    let moods = moodsString.components(separatedBy: ", ")
+                    for mood in moods {
+                        let trimmed = mood.trimmingCharacters(in: .whitespaces)
+                        if !trimmed.isEmpty {
+                            dayData[day]![trimmed, default: 0] += 1
+                        }
+                    }
+                }
+            } else if let mood = entry.mood, !mood.isEmpty {
+                dayData[day]![mood, default: 0] += 1
+            }
+        }
+        
+        // Sort by date and limit to last 14 days with data
+        let sortedDays = dayData.keys.sorted()
+        let limitedDays = Array(sortedDays.suffix(14))
+        
+        return limitedDays.map { DayMoodChartData(date: $0, moodCounts: dayData[$0] ?? [:]) }
+    }
+    
+    private func calculateFocusAreasOverTime() -> [DayAreaChartData] {
+        let calendar = Calendar.current
+        
+        // Group entries by day
+        var dayData: [Date: [String: Int]] = [:]
+        
+        for entry in userContexts {
+            let day = calendar.startOfDay(for: entry.createdAt)
+            if dayData[day] == nil {
+                dayData[day] = [:]
+            }
+            
+            // Extract areas from tags
+            if let tags = entry.tags {
+                let areas = tags.components(separatedBy: ", ")
+                for area in areas {
+                    let trimmed = area.trimmingCharacters(in: .whitespaces)
+                    if !trimmed.isEmpty {
+                        dayData[day]![trimmed, default: 0] += 1
+                    }
+                }
+            }
+        }
+        
+        // Sort by date and limit to last 14 days with data
+        let sortedDays = dayData.keys.sorted()
+        let limitedDays = Array(sortedDays.suffix(14))
+        
+        return limitedDays.map { DayAreaChartData(date: $0, areaCounts: dayData[$0] ?? [:]) }
+    }
+    
+    private func getTopMoods(from data: [DayMoodChartData], limit: Int) -> [String] {
+        var totalCounts: [String: Int] = [:]
+        for day in data {
+            for (mood, count) in day.moodCounts {
+                totalCounts[mood, default: 0] += count
+            }
+        }
+        return Array(totalCounts.sorted { $0.value > $1.value }.prefix(limit).map { $0.key })
+    }
+    
+    private func getTopAreas(from data: [DayAreaChartData], limit: Int) -> [String] {
+        var totalCounts: [String: Int] = [:]
+        for day in data {
+            for (area, count) in day.areaCounts {
+                totalCounts[area, default: 0] += count
+            }
+        }
+        return Array(totalCounts.sorted { $0.value > $1.value }.prefix(limit).map { $0.key })
+    }
+    
+    private func formatShortDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M/d"
+        return formatter.string(from: date)
+    }
+    
+    private func areaColor(for area: String) -> Color {
+        switch area {
+        case "Relationships": return Color(red: 0.85, green: 0.5, blue: 0.55)
+        case "Career": return Color(red: 0.55, green: 0.65, blue: 0.85)
+        case "Health": return Color(red: 0.45, green: 0.7, blue: 0.5)
+        case "Creativity": return Color(red: 0.85, green: 0.65, blue: 0.45)
+        case "Spirituality": return Color(red: 0.7, green: 0.55, blue: 0.8)
+        case "Finances": return Color(red: 0.5, green: 0.75, blue: 0.7)
+        case "Family": return Color(red: 0.75, green: 0.6, blue: 0.5)
+        case "Growth": return Color(red: 0.65, green: 0.75, blue: 0.55)
+        default: return Color.white.opacity(0.5)
+        }
+    }
+}
+
+// MARK: - Time Chart Data Structures
+
+struct DayMoodChartData {
+    let date: Date
+    var moodCounts: [String: Int]
+}
+
+struct DayAreaChartData {
+    let date: Date
+    var areaCounts: [String: Int]
+}
+
+// MARK: - Mood Line Shape
+
+struct MoodLineShape: Shape {
+    let dataPoints: [DayMoodChartData]
+    let mood: String
+    let width: CGFloat
+    let height: CGFloat
+    
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        
+        guard !dataPoints.isEmpty else { return path }
+        
+        let maxCount = dataPoints.flatMap { $0.moodCounts.values }.max() ?? 1
+        var isFirstPoint = true
+        
+        for (index, day) in dataPoints.enumerated() {
+            let count = day.moodCounts[mood] ?? 0
+            if count > 0 {
+                let xPos = dataPoints.count > 1
+                    ? width * CGFloat(index) / CGFloat(dataPoints.count - 1)
+                    : width / 2
+                let yPos = height - (height * CGFloat(count) / CGFloat(max(maxCount, 3)))
+                
+                if isFirstPoint {
+                    path.move(to: CGPoint(x: xPos, y: yPos))
+                    isFirstPoint = false
+                } else {
+                    path.addLine(to: CGPoint(x: xPos, y: yPos))
+                }
+            }
+        }
+        
+        return path
+    }
 }
 
 // MARK: - Stat Card
@@ -749,6 +937,78 @@ struct StatCard: View {
                 )
         )
     }
+}
+
+// MARK: - Activity Calendar Grid
+
+struct ActivityCalendarGrid: View {
+    let allDays: [ActivityDayData]
+    let activityColorProvider: (Int) -> Color
+    
+    private let dayLabels = ["S", "M", "T", "W", "T", "F", "S"]
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // Day labels row
+            HStack(spacing: 0) {
+                ForEach(dayLabels, id: \.self) { day in
+                    Text(day)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(Color.white.opacity(0.3))
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            
+            // Week rows (4 weeks)
+            ForEach(0..<4, id: \.self) { weekIndex in
+                HStack(spacing: 0) {
+                    // 7 days in the week
+                    ForEach(0..<7, id: \.self) { dayIndex in
+                        let index = weekIndex * 7 + dayIndex
+                        let dayData = index < allDays.count ? allDays[index] : nil
+                        let isToday = isToday(dayData)
+                        
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(cellColor(for: dayData))
+                            
+                            // Today indicator - white ring
+                            if isToday {
+                                RoundedRectangle(cornerRadius: 4)
+                                    .stroke(Color.white.opacity(0.8), lineWidth: 2)
+                            }
+                        }
+                        .aspectRatio(1, contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                        .padding(2)
+                        .shadow(color: isToday ? Color.white.opacity(0.3) : Color.clear, radius: 4)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func isToday(_ dayData: ActivityDayData?) -> Bool {
+        guard let dayData = dayData else { return false }
+        let calendar = Calendar.current
+        return calendar.isDateInToday(dayData.date)
+    }
+    
+    private func cellColor(for dayData: ActivityDayData?) -> Color {
+        guard let dayData = dayData else {
+            return Color.white.opacity(0.03)
+        }
+        if dayData.isFuture {
+            return Color.white.opacity(0.03)
+        }
+        return activityColorProvider(dayData.count)
+    }
+}
+
+struct ActivityDayData {
+    let date: Date
+    let count: Int
+    let isFuture: Bool
 }
 
 // MARK: - Entry Card
@@ -902,6 +1162,217 @@ struct EntryCard: View {
         case "Overwhelmed": return Color(red: 0.45, green: 0.6, blue: 0.75)
         case "Peaceful": return Color(red: 0.6, green: 0.7, blue: 0.75)
         default: return Color.white.opacity(0.5)
+        }
+    }
+}
+
+// MARK: - Mood Over Time Chart Content
+
+struct MoodOverTimeChartContent: View {
+    let timeData: [DayMoodChartData]
+    let topMoods: [String]
+    let moodColorProvider: (String) -> Color
+    let formatDate: (Date) -> String
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Chart area
+            GeometryReader { geo in
+                chartContent(width: geo.size.width)
+            }
+            .frame(height: 120)
+            
+            // X-axis labels
+            xAxisLabels
+                .padding(.top, 4)
+            
+            // Legend
+            legendView
+                .padding(.top, 8)
+        }
+    }
+    
+    private func chartContent(width: CGFloat) -> some View {
+        let height: CGFloat = 120
+        let maxGlobalCount = timeData.flatMap { $0.moodCounts.values }.max() ?? 1
+        
+        return ZStack {
+            // Grid lines
+            gridLines(height: height)
+            
+            // Lines for each mood
+            ForEach(topMoods, id: \.self) { mood in
+                MoodLineShape(
+                    dataPoints: timeData,
+                    mood: mood,
+                    width: width,
+                    height: height
+                )
+                .stroke(moodColorProvider(mood), lineWidth: 2)
+            }
+            
+            // Dots for each mood
+            ForEach(topMoods, id: \.self) { mood in
+                moodDots(mood: mood, width: width, height: height, maxCount: maxGlobalCount)
+            }
+        }
+        .frame(height: height)
+    }
+    
+    private func gridLines(height: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            ForEach(0..<4, id: \.self) { i in
+                Divider()
+                    .background(Color.white.opacity(0.06))
+                if i < 3 {
+                    Spacer()
+                }
+            }
+        }
+        .frame(height: height)
+    }
+    
+    private func moodDots(mood: String, width: CGFloat, height: CGFloat, maxCount: Int) -> some View {
+        ForEach(Array(timeData.enumerated()), id: \.offset) { index, day in
+            let count = day.moodCounts[mood] ?? 0
+            if count > 0 {
+                Circle()
+                    .fill(moodColorProvider(mood))
+                    .frame(width: 6, height: 6)
+                    .position(
+                        x: timeData.count > 1 ? width * CGFloat(index) / CGFloat(timeData.count - 1) : width / 2,
+                        y: height - (height * CGFloat(count) / CGFloat(max(maxCount, 3)))
+                    )
+            }
+        }
+    }
+    
+    private var xAxisLabels: some View {
+        HStack {
+            ForEach(Array(timeData.enumerated()), id: \.offset) { index, day in
+                if index == 0 || index == timeData.count - 1 || index == timeData.count / 2 {
+                    Text(formatDate(day.date))
+                        .font(.system(size: 9))
+                        .foregroundColor(Color.white.opacity(0.3))
+                    if index < timeData.count - 1 {
+                        Spacer()
+                    }
+                }
+            }
+        }
+    }
+    
+    private var legendView: some View {
+        HStack(spacing: 12) {
+            ForEach(topMoods, id: \.self) { mood in
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(moodColorProvider(mood))
+                        .frame(width: 6, height: 6)
+                    Text(mood)
+                        .font(.system(size: 10))
+                        .foregroundColor(Color.white.opacity(0.5))
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Focus Areas Over Time Chart Content
+
+struct FocusAreasOverTimeChartContent: View {
+    let timeData: [DayAreaChartData]
+    let topAreas: [String]
+    let areaColorProvider: (String) -> Color
+    let formatDate: (Date) -> String
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Chart area - stacked bar chart
+            GeometryReader { geo in
+                barChart(width: geo.size.width)
+            }
+            .frame(height: 120)
+            
+            // X-axis labels
+            xAxisLabels
+                .padding(.top, 4)
+            
+            // Legend
+            legendView
+                .padding(.top, 8)
+        }
+    }
+    
+    private func barChart(width: CGFloat) -> some View {
+        let height: CGFloat = 120
+        let barWidth = calculateBarWidth(totalWidth: width)
+        let maxTotal = calculateMaxTotal()
+        
+        return HStack(alignment: .bottom, spacing: 4) {
+            ForEach(Array(timeData.enumerated()), id: \.offset) { index, day in
+                barStack(day: day, barWidth: barWidth, height: height, maxTotal: maxTotal)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: height, alignment: .bottom)
+    }
+    
+    private func calculateBarWidth(totalWidth: CGFloat) -> CGFloat {
+        max(8, min(24, (totalWidth - CGFloat(timeData.count - 1) * 4) / CGFloat(timeData.count)))
+    }
+    
+    private func calculateMaxTotal() -> Int {
+        timeData.map { day in
+            topAreas.reduce(0) { $0 + (day.areaCounts[$1] ?? 0) }
+        }.max() ?? 1
+    }
+    
+    private func barStack(day: DayAreaChartData, barWidth: CGFloat, height: CGFloat, maxTotal: Int) -> some View {
+        VStack(spacing: 0) {
+            ForEach(topAreas.reversed(), id: \.self) { area in
+                let count = day.areaCounts[area] ?? 0
+                if count > 0 {
+                    Rectangle()
+                        .fill(areaColorProvider(area))
+                        .frame(height: height * CGFloat(count) / CGFloat(max(maxTotal, 1)))
+                }
+            }
+        }
+        .frame(width: barWidth)
+        .clipShape(RoundedRectangle(cornerRadius: 3))
+    }
+    
+    private var labelIndices: [Int] {
+        timeData.count <= 5 ? Array(0..<timeData.count) : [0, timeData.count / 2, timeData.count - 1]
+    }
+    
+    private var xAxisLabels: some View {
+        HStack {
+            ForEach(Array(timeData.enumerated()), id: \.offset) { index, day in
+                if labelIndices.contains(index) {
+                    Text(formatDate(day.date))
+                        .font(.system(size: 9))
+                        .foregroundColor(Color.white.opacity(0.3))
+                    if index < timeData.count - 1 && labelIndices.contains(index) {
+                        Spacer()
+                    }
+                }
+            }
+        }
+    }
+    
+    private var legendView: some View {
+        FlowLayout(spacing: 8) {
+            ForEach(topAreas, id: \.self) { area in
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(areaColorProvider(area))
+                        .frame(width: 6, height: 6)
+                    Text(area)
+                        .font(.system(size: 10))
+                        .foregroundColor(Color.white.opacity(0.5))
+                }
+            }
         }
     }
 }

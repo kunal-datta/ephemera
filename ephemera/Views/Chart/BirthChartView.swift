@@ -267,8 +267,14 @@ struct BirthChartView: View {
                     // Mood breakdown
                     journalMoodBreakdown
                     
+                    // Mood patterns over time
+                    journalMoodOverTimeChart
+                    
                     // Focus areas
                     journalFocusAreas
+                    
+                    // Focus areas over time
+                    journalFocusAreasOverTimeChart
                     
                     // AI Insight
                     journalAIInsight
@@ -406,83 +412,37 @@ struct BirthChartView: View {
     private var journalActivityCalendar: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("Activity")
+                Text("Journal activity")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(Color.white.opacity(0.5))
                 
                 Spacer()
                 
-                Text("Last 8 weeks")
+                Text("Last 4 weeks")
                     .font(.system(size: 11))
                     .foregroundColor(Color.white.opacity(0.3))
             }
             
-            // Calendar grid - 8 weeks x 7 days
-            let allDays = generateActivityDays()
-            
-            VStack(alignment: .leading, spacing: 4) {
-                // Day labels row
-                HStack(spacing: 4) {
-                    Text("")
-                        .frame(width: 16)
-                    
-                    ForEach(["S", "M", "T", "W", "T", "F", "S"], id: \.self) { day in
-                        Text(day)
-                            .font(.system(size: 8, weight: .medium))
-                            .foregroundColor(Color.white.opacity(0.25))
-                            .frame(width: 14)
-                    }
-                }
-                
-                // Week rows
-                ForEach(0..<8, id: \.self) { weekIndex in
-                    HStack(spacing: 4) {
-                        // Week number or empty
-                        if weekIndex == 0 {
-                            Text("Now")
-                                .font(.system(size: 7))
-                                .foregroundColor(Color.white.opacity(0.25))
-                                .frame(width: 16, alignment: .trailing)
-                        } else {
-                            Text("")
-                                .frame(width: 16)
-                        }
-                        
-                        // 7 days in the week
-                        ForEach(0..<7, id: \.self) { dayIndex in
-                            let index = weekIndex * 7 + dayIndex
-                            if index < allDays.count {
-                                let dayData = allDays[index]
-                                
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(dayData.isFuture 
-                                          ? Color.white.opacity(0.02)
-                                          : activityColor(for: dayData.count))
-                                    .frame(width: 14, height: 14)
-                            } else {
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(Color.white.opacity(0.02))
-                                    .frame(width: 14, height: 14)
-                            }
-                        }
-                    }
-                }
-            }
+            // Calendar grid - 8 weeks x 7 days (full width)
+            ActivityCalendarGrid(
+                allDays: generateActivityDays(),
+                activityColorProvider: activityColor
+            )
             
             // Legend
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 Text("Less")
-                    .font(.system(size: 9))
+                    .font(.system(size: 10))
                     .foregroundColor(Color.white.opacity(0.3))
                 
                 ForEach(0..<5, id: \.self) { level in
-                    RoundedRectangle(cornerRadius: 2)
+                    RoundedRectangle(cornerRadius: 3)
                         .fill(activityColor(for: level))
-                        .frame(width: 10, height: 10)
+                        .frame(width: 14, height: 14)
                 }
                 
                 Text("More")
-                    .font(.system(size: 9))
+                    .font(.system(size: 10))
                     .foregroundColor(Color.white.opacity(0.3))
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -498,12 +458,6 @@ struct BirthChartView: View {
         )
     }
     
-    private struct ActivityDayData: Hashable {
-        let date: Date
-        let count: Int
-        let isFuture: Bool
-    }
-    
     private func generateActivityDays() -> [ActivityDayData] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
@@ -514,13 +468,13 @@ struct BirthChartView: View {
         // Calculate start of this week (Sunday)
         let startOfThisWeek = calendar.date(byAdding: .day, value: -(todayWeekday - 1), to: today)!
         
-        // Go back 7 more weeks (8 weeks total including current)
-        let startDate = calendar.date(byAdding: .day, value: -49, to: startOfThisWeek)!
+        // Go back 3 more weeks (4 weeks total including current)
+        let startDate = calendar.date(byAdding: .day, value: -21, to: startOfThisWeek)!
         
         var days: [ActivityDayData] = []
         
-        // Generate 56 days (8 weeks)
-        for dayOffset in 0..<56 {
+        // Generate 28 days (4 weeks)
+        for dayOffset in 0..<28 {
             let date = calendar.date(byAdding: .day, value: dayOffset, to: startDate)!
             let count = entriesOnDate(date)
             let isFuture = date > today
@@ -731,6 +685,182 @@ struct BirthChartView: View {
         case "Growth": return "arrow.up.forward"
         default: return "circle"
         }
+    }
+    
+    private func areaColor(for area: String) -> Color {
+        switch area {
+        case "Relationships": return Color(red: 0.85, green: 0.5, blue: 0.55)
+        case "Career": return Color(red: 0.55, green: 0.65, blue: 0.85)
+        case "Health": return Color(red: 0.45, green: 0.7, blue: 0.5)
+        case "Creativity": return Color(red: 0.85, green: 0.65, blue: 0.45)
+        case "Spirituality": return Color(red: 0.7, green: 0.55, blue: 0.8)
+        case "Finances": return Color(red: 0.5, green: 0.75, blue: 0.7)
+        case "Family": return Color(red: 0.75, green: 0.6, blue: 0.5)
+        case "Growth": return Color(red: 0.65, green: 0.75, blue: 0.55)
+        default: return Color.white.opacity(0.5)
+        }
+    }
+    
+    // MARK: - Mood Patterns Over Time Chart
+    
+    private var journalMoodOverTimeChart: some View {
+        let timeData = calculateMoodOverTime()
+        let topMoods = getTopMoods(from: timeData, limit: 4)
+        
+        return VStack(alignment: .leading, spacing: 16) {
+            Text("Mood patterns over time")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(Color.white.opacity(0.5))
+            
+            if timeData.isEmpty {
+                Text("Add more entries to see trends")
+                    .font(.system(size: 13))
+                    .foregroundColor(Color.white.opacity(0.3))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 30)
+            } else {
+                MoodOverTimeChartContent(
+                    timeData: timeData,
+                    topMoods: topMoods,
+                    moodColorProvider: moodColor,
+                    formatDate: formatShortDate
+                )
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white.opacity(0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                )
+        )
+    }
+    
+    // MARK: - Focus Areas Over Time Chart
+    
+    private var journalFocusAreasOverTimeChart: some View {
+        let timeData = calculateFocusAreasOverTime()
+        let topAreas = getTopAreas(from: timeData, limit: 5)
+        
+        return VStack(alignment: .leading, spacing: 16) {
+            Text("Focus areas over time")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(Color.white.opacity(0.5))
+            
+            if timeData.isEmpty {
+                Text("Add more entries to see trends")
+                    .font(.system(size: 13))
+                    .foregroundColor(Color.white.opacity(0.3))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 30)
+            } else {
+                FocusAreasOverTimeChartContent(
+                    timeData: timeData,
+                    topAreas: topAreas,
+                    areaColorProvider: areaColor,
+                    formatDate: formatShortDate
+                )
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white.opacity(0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                )
+        )
+    }
+    
+    // MARK: - Chart Data Calculations
+    
+    private func calculateMoodOverTime() -> [DayMoodChartData] {
+        let calendar = Calendar.current
+        var dayData: [Date: [String: Int]] = [:]
+        
+        for entry in journalContexts {
+            let day = calendar.startOfDay(for: entry.createdAt)
+            if dayData[day] == nil {
+                dayData[day] = [:]
+            }
+            
+            if let response = entry.response.range(of: "Moods: ") {
+                let afterMoods = entry.response[response.upperBound...]
+                if let periodIndex = afterMoods.firstIndex(of: ".") {
+                    let moodsString = String(afterMoods[..<periodIndex])
+                    let moods = moodsString.components(separatedBy: ", ")
+                    for mood in moods {
+                        let trimmed = mood.trimmingCharacters(in: .whitespaces)
+                        if !trimmed.isEmpty {
+                            dayData[day]![trimmed, default: 0] += 1
+                        }
+                    }
+                }
+            }
+        }
+        
+        let sortedDays = dayData.keys.sorted()
+        let limitedDays = Array(sortedDays.suffix(14))
+        return limitedDays.map { DayMoodChartData(date: $0, moodCounts: dayData[$0] ?? [:]) }
+    }
+    
+    private func calculateFocusAreasOverTime() -> [DayAreaChartData] {
+        let calendar = Calendar.current
+        var dayData: [Date: [String: Int]] = [:]
+        
+        for entry in journalContexts {
+            let day = calendar.startOfDay(for: entry.createdAt)
+            if dayData[day] == nil {
+                dayData[day] = [:]
+            }
+            
+            if let response = entry.response.range(of: "Focus areas: ") {
+                let afterAreas = entry.response[response.upperBound...]
+                if let periodIndex = afterAreas.firstIndex(of: ".") {
+                    let areasString = String(afterAreas[..<periodIndex])
+                    let areas = areasString.components(separatedBy: ", ")
+                    for area in areas {
+                        let trimmed = area.trimmingCharacters(in: .whitespaces)
+                        if !trimmed.isEmpty {
+                            dayData[day]![trimmed, default: 0] += 1
+                        }
+                    }
+                }
+            }
+        }
+        
+        let sortedDays = dayData.keys.sorted()
+        let limitedDays = Array(sortedDays.suffix(14))
+        return limitedDays.map { DayAreaChartData(date: $0, areaCounts: dayData[$0] ?? [:]) }
+    }
+    
+    private func getTopMoods(from data: [DayMoodChartData], limit: Int) -> [String] {
+        var totalCounts: [String: Int] = [:]
+        for day in data {
+            for (mood, count) in day.moodCounts {
+                totalCounts[mood, default: 0] += count
+            }
+        }
+        return Array(totalCounts.sorted { $0.value > $1.value }.prefix(limit).map { $0.key })
+    }
+    
+    private func getTopAreas(from data: [DayAreaChartData], limit: Int) -> [String] {
+        var totalCounts: [String: Int] = [:]
+        for day in data {
+            for (area, count) in day.areaCounts {
+                totalCounts[area, default: 0] += count
+            }
+        }
+        return Array(totalCounts.sorted { $0.value > $1.value }.prefix(limit).map { $0.key })
+    }
+    
+    private func formatShortDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M/d"
+        return formatter.string(from: date)
     }
     
     // MARK: - AI Insight Card
