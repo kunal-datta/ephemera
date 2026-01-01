@@ -154,17 +154,29 @@ struct ChartReadingView: View {
                         .padding(.bottom, 16)
                 }
                 
-                // Swipeable cards (horizontal paging within the scroll view)
+                // Cards with swipe gesture navigation
                 if !reading.sections.isEmpty {
-                    TabView(selection: $currentCardIndex) {
-                        ForEach(Array(reading.sections.enumerated()), id: \.element.id) { index, section in
-                            sectionCard(section)
-                                .tag(index)
-                        }
-                    }
-                    .tabViewStyle(.page(indexDisplayMode: .never))
-                    .frame(height: cardHeight(for: reading.sections))
-                    .animation(.easeInOut(duration: 0.3), value: currentCardIndex)
+                    let section = reading.sections[currentCardIndex]
+                    sectionCard(section)
+                        .id(currentCardIndex) // Force view refresh on index change
+                        .transition(.opacity)
+                        .gesture(
+                            DragGesture(minimumDistance: 50)
+                                .onEnded { value in
+                                    let horizontalAmount = value.translation.width
+                                    if horizontalAmount < -50 && currentCardIndex < reading.sections.count - 1 {
+                                        // Swipe left - next card
+                                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                            currentCardIndex += 1
+                                        }
+                                    } else if horizontalAmount > 50 && currentCardIndex > 0 {
+                                        // Swipe right - previous card
+                                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                            currentCardIndex -= 1
+                                        }
+                                    }
+                                }
+                        )
                 } else {
                     // Fallback: show raw content if parsing failed
                     rawContentCard(reading.content)
@@ -173,16 +185,6 @@ struct ChartReadingView: View {
             }
             .padding(.bottom, 40)
         }
-    }
-    
-    /// Calculate appropriate card height based on content
-    private func cardHeight(for sections: [ReadingSection]) -> CGFloat {
-        // Find the longest section to determine height
-        let maxBodyLength = sections.map { $0.body.count }.max() ?? 500
-        // Estimate: ~50 chars per line, ~20pt per line + padding
-        let estimatedLines = CGFloat(maxBodyLength) / 40.0
-        let estimatedHeight = max(300, min(600, estimatedLines * 22 + 100))
-        return estimatedHeight
     }
     
     // MARK: - Interactive Chart Section
@@ -302,11 +304,9 @@ struct ChartReadingView: View {
             
             // Section body with markdown rendering
             markdownText(section.body)
-            
-            Spacer(minLength: 0)
         }
         .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 20)
                 .fill(Color(red: 0.08, green: 0.08, blue: 0.12))
