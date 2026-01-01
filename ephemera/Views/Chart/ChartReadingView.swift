@@ -141,36 +141,48 @@ struct ChartReadingView: View {
     // MARK: - Reading Content
     
     private func readingContent(_ reading: AIReading) -> some View {
-        VStack(spacing: 0) {
-            // Interactive chart at top
-            interactiveChartSection(reading: reading)
-                .padding(.top, 8)
-            
-            // Custom page indicator below chart
-            if !reading.sections.isEmpty {
-                pageIndicator(total: reading.sections.count)
-                    .padding(.top, 12)
-                    .padding(.bottom, 8)
-            }
-            
-            // Swipeable cards
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 0) {
+                // Interactive chart at top
+                interactiveChartSection(reading: reading)
+                    .padding(.top, 8)
+                
+                // Custom page indicator below chart
                 if !reading.sections.isEmpty {
-                TabView(selection: $currentCardIndex) {
-                    ForEach(Array(reading.sections.enumerated()), id: \.element.id) { index, section in
-                        swipeableSectionCard(section, index: index, total: reading.sections.count)
-                            .tag(index)
-                    }
+                    pageIndicator(total: reading.sections.count)
+                        .padding(.top, 12)
+                        .padding(.bottom, 16)
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                .animation(.easeInOut(duration: 0.3), value: currentCardIndex)
+                
+                // Swipeable cards (horizontal paging within the scroll view)
+                if !reading.sections.isEmpty {
+                    TabView(selection: $currentCardIndex) {
+                        ForEach(Array(reading.sections.enumerated()), id: \.element.id) { index, section in
+                            sectionCard(section)
+                                .tag(index)
+                        }
+                    }
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .frame(height: cardHeight(for: reading.sections))
+                    .animation(.easeInOut(duration: 0.3), value: currentCardIndex)
                 } else {
                     // Fallback: show raw content if parsing failed
-                ScrollView(showsIndicators: false) {
                     rawContentCard(reading.content)
                         .padding(.horizontal, 20)
                 }
             }
+            .padding(.bottom, 40)
         }
+    }
+    
+    /// Calculate appropriate card height based on content
+    private func cardHeight(for sections: [ReadingSection]) -> CGFloat {
+        // Find the longest section to determine height
+        let maxBodyLength = sections.map { $0.body.count }.max() ?? 500
+        // Estimate: ~50 chars per line, ~20pt per line + padding
+        let estimatedLines = CGFloat(maxBodyLength) / 40.0
+        let estimatedHeight = max(300, min(600, estimatedLines * 22 + 100))
+        return estimatedHeight
     }
     
     // MARK: - Interactive Chart Section
@@ -281,21 +293,20 @@ struct ChartReadingView: View {
         }
     }
     
-    private func swipeableSectionCard(_ section: ReadingSection, index: Int, total: Int) -> some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 16) {
+    private func sectionCard(_ section: ReadingSection) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
             // Section header
-                Text(cleanSectionTitle(section.title))
-                    .font(.custom("Georgia", size: 22))
-                    .foregroundColor(Color(red: 0.95, green: 0.92, blue: 0.88))
-                
-                // Section body with markdown rendering
-                markdownText(section.body)
-                
-                Spacer(minLength: 20)
-            }
-            .padding(24)
+            Text(cleanSectionTitle(section.title))
+                .font(.custom("Georgia", size: 22))
+                .foregroundColor(Color(red: 0.95, green: 0.92, blue: 0.88))
+            
+            // Section body with markdown rendering
+            markdownText(section.body)
+            
+            Spacer(minLength: 0)
         }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 20)
                 .fill(Color(red: 0.08, green: 0.08, blue: 0.12))
@@ -316,7 +327,6 @@ struct ChartReadingView: View {
                 .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 10)
         )
         .padding(.horizontal, 20)
-        .padding(.vertical, 8)
     }
     
     private func rawContentCard(_ content: String) -> some View {
