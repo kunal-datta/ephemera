@@ -161,7 +161,8 @@ struct BirthChartView: View {
         .fullScreenCover(isPresented: $showJournalEntry) {
             if let profile = currentProfile {
                 JournalEntryView(profile: profile) {
-                    // Entry was saved - contexts will auto-refresh via @Query
+                    // Entry was saved - navigate to Journal tab
+                    selectedTab = 1
                 }
             }
         }
