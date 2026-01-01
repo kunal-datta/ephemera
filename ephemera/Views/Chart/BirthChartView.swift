@@ -317,17 +317,20 @@ struct BirthChartView: View {
         GeometryReader { geometry in
             let size = min(geometry.size.width, 340)
             
-            ZStack {
-                // Outer ring with zodiac signs
-                ChartWheelView(
-                    planets: chart.planets,
-                    houses: chart.houses,
-                    risingSign: chart.risingSign,
-                    size: size
-                )
+            Button(action: { showReading = true }) {
+                ZStack {
+                    // Outer ring with zodiac signs
+                    ChartWheelView(
+                        planets: chart.planets,
+                        houses: chart.houses,
+                        risingSign: chart.risingSign,
+                        size: size
+                    )
+                }
+                .frame(width: size, height: size)
+                .frame(maxWidth: .infinity)
             }
-            .frame(width: size, height: size)
-            .frame(maxWidth: .infinity)
+            .buttonStyle(ChartWheelButtonStyle())
         }
         .frame(height: 340)
     }
@@ -1183,7 +1186,7 @@ struct ChartElementDetailSheet: View {
     }
 }
 
-// MARK: - Button Style
+// MARK: - Button Styles
 
 struct ScaleButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -1191,6 +1194,15 @@ struct ScaleButtonStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
             .opacity(configuration.isPressed ? 0.9 : 1.0)
             .animation(.easeInOut(duration: 0.15), value: configuration.isPressed)
+    }
+}
+
+struct ChartWheelButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .opacity(configuration.isPressed ? 0.85 : 1.0)
+            .animation(.easeInOut(duration: 0.2), value: configuration.isPressed)
     }
 }
 
