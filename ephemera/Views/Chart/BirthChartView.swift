@@ -832,7 +832,7 @@ struct BirthChartView: View {
                     .font(.system(size: 12))
                     .foregroundColor(Color(red: 0.65, green: 0.55, blue: 0.8))
                 
-                Text("Get your reading for today")
+                Text("Get your in-depth reading for today")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(Color.white.opacity(0.5))
                 

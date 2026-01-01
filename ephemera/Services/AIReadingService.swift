@@ -156,6 +156,73 @@ class AIReadingService: ObservableObject {
         }
     }
     
+    // MARK: - Generate Daily Reading
+    
+    /// Generates a brief daily reading based on current transits
+    func generateDailyReading(
+        chart: BirthChart,
+        profile: UserProfile,
+        contexts: [UserContext]
+    ) async throws -> String {
+        // Calculate current transits
+        let transits = ChartCore.shared.getSignificantTransits(natalChart: chart, limit: 4)
+        
+        let prompt = buildDailyReadingPrompt(chart: chart, profile: profile, contexts: contexts, transits: transits)
+        
+        let response = try await model.generateContent(prompt)
+        
+        guard let text = response.text else {
+            throw AIReadingError.noResponse
+        }
+        
+        return text
+    }
+    
+    private func buildDailyReadingPrompt(
+        chart: BirthChart,
+        profile: UserProfile,
+        contexts: [UserContext],
+        transits: [TransitAspect]
+    ) -> String {
+        let chartSummary = buildChartSummary(chart: chart)
+        let contextSummary = contexts.recentEntries(3).formattedForPrompt()
+        let transitSummary = transits.formattedForPrompt()
+        let currentDate = formatCurrentDate()
+        
+        return """
+        You are a wise, compassionate evolutionary astrologer delivering a brief daily reading.
+        
+        ## Your Task
+        Write a focused, personal daily reading (100-150 words) that:
+        1. Opens with a sense of the day's energy
+        2. Highlights 1-2 key themes from today's transits to their chart
+        3. Offers a practical insight or gentle guidance
+        4. Feels warm, grounded, and specific to them
+        
+        ## Guidelines
+        - This is for \(currentDate) — make it feel timely
+        - Be concise but meaningful — quality over quantity
+        - Focus on what's most alive for them today
+        - Never fear-monger — frame challenges as opportunities
+        - Write in second person ("You...")
+        - Don't use headers or bullet points — flowing prose only
+        - Start with a single evocative sentence about the day's energy
+        - End with something actionable or reflective they can carry with them
+        - DO NOT greet them by name or say "Hi \(profile.name)"
+        
+        ## Their Birth Chart
+        \(chartSummary)
+        
+        ## Current Transits to Their Chart
+        \(transitSummary)
+        
+        ## Recent Context They've Shared
+        \(contextSummary)
+        
+        Write your daily reading now. Make it feel like a personal note from the cosmos, written just for them, for today.
+        """
+    }
+    
     // MARK: - Generate Journal Insight
     
     /// Generates an insight based on journal entries and birth chart
