@@ -40,9 +40,13 @@ struct BirthChartView: View {
     @State private var showProfile = false
     @State private var showReading = false
     @State private var showJournalEntry = false
+    @State private var showJournalHistory = false
     @State private var shouldDismissAfterProfileUpdate = false
     @State private var selectedElement: ChartElementSelection?
     @State private var selectedTab: Int = 0 // 0 = Chart, 1 = Journal
+    @State private var journalInsight: String?
+    @State private var isLoadingInsight = false
+    @State private var lastInsightEntryCount = 0
     
     private var currentProfile: UserProfile? {
         profiles.first
@@ -161,6 +165,11 @@ struct BirthChartView: View {
                 }
             }
         }
+        .fullScreenCover(isPresented: $showJournalHistory) {
+            if let profile = currentProfile {
+                JournalHistoryView(profile: profile)
+            }
+        }
     }
     
     // MARK: - Segmented Control
@@ -211,6 +220,9 @@ struct BirthChartView: View {
                 // Header
                 headerSection
                 
+                // Journal Entry (with history link underneath)
+                journalEntryButton
+                
                 // Chart Wheel
                 chartWheelSection
                 
@@ -251,8 +263,20 @@ struct BirthChartView: View {
                 if journalContexts.isEmpty {
                     journalEmptyState
                 } else {
+                    // Activity calendar
+                    journalActivityCalendar
+                    
                     // Stats row
                     journalStatsRow
+                    
+                    // Mood breakdown
+                    journalMoodBreakdown
+                    
+                    // Focus areas
+                    journalFocusAreas
+                    
+                    // AI Insight
+                    journalAIInsight
                     
                     // Entries
                     LazyVStack(spacing: 12) {
@@ -266,6 +290,16 @@ struct BirthChartView: View {
             }
             .padding(.horizontal, 24)
             .padding(.top, 8)
+        }
+        .onAppear {
+            if journalContexts.count >= 2 && (journalInsight == nil || lastInsightEntryCount != journalContexts.count) {
+                generateJournalInsight()
+            }
+        }
+        .onChange(of: journalContexts.count) { oldCount, newCount in
+            if newCount >= 2 && newCount != lastInsightEntryCount {
+                generateJournalInsight()
+            }
         }
     }
     
@@ -372,6 +406,421 @@ struct BirthChartView: View {
         return "\(streak)"
     }
     
+    // MARK: - Activity Calendar
+    
+    private var journalActivityCalendar: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Activity")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(Color.white.opacity(0.5))
+                
+                Spacer()
+                
+                Text("Last 8 weeks")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color.white.opacity(0.3))
+            }
+            
+            // Calendar grid - 8 weeks x 7 days
+            let allDays = generateActivityDays()
+            
+            VStack(alignment: .leading, spacing: 4) {
+                // Day labels row
+                HStack(spacing: 4) {
+                    Text("")
+                        .frame(width: 16)
+                    
+                    ForEach(["S", "M", "T", "W", "T", "F", "S"], id: \.self) { day in
+                        Text(day)
+                            .font(.system(size: 8, weight: .medium))
+                            .foregroundColor(Color.white.opacity(0.25))
+                            .frame(width: 14)
+                    }
+                }
+                
+                // Week rows
+                ForEach(0..<8, id: \.self) { weekIndex in
+                    HStack(spacing: 4) {
+                        // Week number or empty
+                        if weekIndex == 0 {
+                            Text("Now")
+                                .font(.system(size: 7))
+                                .foregroundColor(Color.white.opacity(0.25))
+                                .frame(width: 16, alignment: .trailing)
+                        } else {
+                            Text("")
+                                .frame(width: 16)
+                        }
+                        
+                        // 7 days in the week
+                        ForEach(0..<7, id: \.self) { dayIndex in
+                            let index = weekIndex * 7 + dayIndex
+                            if index < allDays.count {
+                                let dayData = allDays[index]
+                                
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(dayData.isFuture 
+                                          ? Color.white.opacity(0.02)
+                                          : activityColor(for: dayData.count))
+                                    .frame(width: 14, height: 14)
+                            } else {
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(Color.white.opacity(0.02))
+                                    .frame(width: 14, height: 14)
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Legend
+            HStack(spacing: 4) {
+                Text("Less")
+                    .font(.system(size: 9))
+                    .foregroundColor(Color.white.opacity(0.3))
+                
+                ForEach(0..<5, id: \.self) { level in
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(activityColor(for: level))
+                        .frame(width: 10, height: 10)
+                }
+                
+                Text("More")
+                    .font(.system(size: 9))
+                    .foregroundColor(Color.white.opacity(0.3))
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white.opacity(0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                )
+        )
+    }
+    
+    private struct ActivityDayData: Hashable {
+        let date: Date
+        let count: Int
+        let isFuture: Bool
+    }
+    
+    private func generateActivityDays() -> [ActivityDayData] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        
+        // Find what day of week today is (1 = Sunday, 7 = Saturday)
+        let todayWeekday = calendar.component(.weekday, from: today)
+        
+        // Calculate start of this week (Sunday)
+        let startOfThisWeek = calendar.date(byAdding: .day, value: -(todayWeekday - 1), to: today)!
+        
+        // Go back 7 more weeks (8 weeks total including current)
+        let startDate = calendar.date(byAdding: .day, value: -49, to: startOfThisWeek)!
+        
+        var days: [ActivityDayData] = []
+        
+        // Generate 56 days (8 weeks)
+        for dayOffset in 0..<56 {
+            let date = calendar.date(byAdding: .day, value: dayOffset, to: startDate)!
+            let count = entriesOnDate(date)
+            let isFuture = date > today
+            
+            days.append(ActivityDayData(date: date, count: count, isFuture: isFuture))
+        }
+        
+        return days
+    }
+    
+    private func entriesOnDate(_ date: Date) -> Int {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        
+        return journalContexts.filter { entry in
+            let entryDay = calendar.startOfDay(for: entry.createdAt)
+            return entryDay == startOfDay
+        }.count
+    }
+    
+    private func activityColor(for count: Int) -> Color {
+        switch count {
+        case 0: return Color.white.opacity(0.04)
+        case 1: return Color(red: 0.4, green: 0.55, blue: 0.45).opacity(0.5)
+        case 2: return Color(red: 0.4, green: 0.55, blue: 0.45).opacity(0.7)
+        case 3: return Color(red: 0.4, green: 0.55, blue: 0.45).opacity(0.85)
+        default: return Color(red: 0.4, green: 0.55, blue: 0.45)
+        }
+    }
+    
+    // MARK: - Mood Breakdown
+    
+    private var journalMoodBreakdown: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Mood patterns")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(Color.white.opacity(0.5))
+            
+            let moodCounts = calculateMoodCounts()
+            let maxCount = moodCounts.values.max() ?? 1
+            
+            VStack(spacing: 10) {
+                ForEach(moodCounts.sorted(by: { $0.value > $1.value }).prefix(5), id: \.key) { mood, count in
+                    HStack(spacing: 12) {
+                        Image(systemName: moodSymbol(for: mood))
+                            .font(.system(size: 14))
+                            .foregroundColor(moodColor(for: mood))
+                            .frame(width: 20)
+                        
+                        Text(mood)
+                            .font(.system(size: 14))
+                            .foregroundColor(Color.white.opacity(0.8))
+                            .frame(width: 80, alignment: .leading)
+                        
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(Color.white.opacity(0.06))
+                                
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(moodColor(for: mood).opacity(0.5))
+                                    .frame(width: geo.size.width * CGFloat(count) / CGFloat(maxCount))
+                            }
+                        }
+                        .frame(height: 6)
+                        
+                        Text("\(count)")
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .foregroundColor(Color.white.opacity(0.4))
+                            .frame(width: 24, alignment: .trailing)
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white.opacity(0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                )
+        )
+    }
+    
+    private func calculateMoodCounts() -> [String: Int] {
+        var counts: [String: Int] = [:]
+        for entry in journalContexts {
+            if let response = entry.response.range(of: "Moods: ") {
+                let afterMoods = entry.response[response.upperBound...]
+                if let periodIndex = afterMoods.firstIndex(of: ".") {
+                    let moodsString = String(afterMoods[..<periodIndex])
+                    let moods = moodsString.components(separatedBy: ", ")
+                    for mood in moods {
+                        let trimmed = mood.trimmingCharacters(in: .whitespaces)
+                        if !trimmed.isEmpty {
+                            counts[trimmed, default: 0] += 1
+                        }
+                    }
+                }
+            }
+        }
+        return counts
+    }
+    
+    private func moodSymbol(for mood: String) -> String {
+        switch mood {
+        case "Grounded": return "leaf"
+        case "Anxious": return "wind"
+        case "Hopeful": return "sparkle"
+        case "Uncertain": return "cloud.fog"
+        case "Energized": return "bolt"
+        case "Reflective": return "moon.stars"
+        case "Overwhelmed": return "water.waves"
+        case "Peaceful": return "cloud"
+        default: return "circle"
+        }
+    }
+    
+    private func moodColor(for mood: String) -> Color {
+        switch mood {
+        case "Grounded": return Color(red: 0.45, green: 0.65, blue: 0.45)
+        case "Anxious": return Color(red: 0.7, green: 0.55, blue: 0.65)
+        case "Hopeful": return Color(red: 0.85, green: 0.75, blue: 0.45)
+        case "Uncertain": return Color(red: 0.55, green: 0.55, blue: 0.6)
+        case "Energized": return Color(red: 0.85, green: 0.6, blue: 0.35)
+        case "Reflective": return Color(red: 0.55, green: 0.5, blue: 0.7)
+        case "Overwhelmed": return Color(red: 0.45, green: 0.6, blue: 0.75)
+        case "Peaceful": return Color(red: 0.6, green: 0.7, blue: 0.75)
+        default: return Color.white.opacity(0.5)
+        }
+    }
+    
+    // MARK: - Focus Areas Breakdown
+    
+    private var journalFocusAreas: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Focus areas")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(Color.white.opacity(0.5))
+            
+            let areaCounts = calculateLifeAreaCounts()
+            
+            FlowLayout(spacing: 8) {
+                ForEach(areaCounts.sorted(by: { $0.value > $1.value }), id: \.key) { area, count in
+                    HStack(spacing: 6) {
+                        Image(systemName: areaSymbol(for: area))
+                            .font(.system(size: 11))
+                        
+                        Text(area)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(Color.white.opacity(0.8))
+                        
+                        Text("\(count)")
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundColor(Color.white.opacity(0.4))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule()
+                            .fill(Color.white.opacity(0.06))
+                    )
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white.opacity(0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                )
+        )
+    }
+    
+    private func calculateLifeAreaCounts() -> [String: Int] {
+        var counts: [String: Int] = [:]
+        for entry in journalContexts {
+            if let response = entry.response.range(of: "Focus areas: ") {
+                let afterAreas = entry.response[response.upperBound...]
+                if let periodIndex = afterAreas.firstIndex(of: ".") {
+                    let areasString = String(afterAreas[..<periodIndex])
+                    let areas = areasString.components(separatedBy: ", ")
+                    for area in areas {
+                        let trimmed = area.trimmingCharacters(in: .whitespaces)
+                        if !trimmed.isEmpty {
+                            counts[trimmed, default: 0] += 1
+                        }
+                    }
+                }
+            }
+        }
+        return counts
+    }
+    
+    private func areaSymbol(for area: String) -> String {
+        switch area {
+        case "Relationships": return "heart"
+        case "Career": return "target"
+        case "Health": return "leaf"
+        case "Creativity": return "paintbrush"
+        case "Spirituality": return "sparkles"
+        case "Finances": return "chart.line.uptrend.xyaxis"
+        case "Family": return "house"
+        case "Growth": return "arrow.up.forward"
+        default: return "circle"
+        }
+    }
+    
+    // MARK: - AI Insight Card
+    
+    private var journalAIInsight: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(red: 0.7, green: 0.6, blue: 0.85))
+                
+                Text("Insight")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(Color.white.opacity(0.5))
+                
+                Spacer()
+                
+                if isLoadingInsight {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                }
+            }
+            
+            if isLoadingInsight {
+                VStack(spacing: 12) {
+                    ForEach(0..<3, id: \.self) { _ in
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color.white.opacity(0.06))
+                            .frame(height: 14)
+                    }
+                }
+                .padding(.vertical, 8)
+            } else if let insight = journalInsight {
+                Text(insight)
+                    .font(.system(size: 15))
+                    .foregroundColor(Color.white.opacity(0.8))
+                    .lineSpacing(5)
+            } else if journalContexts.count < 2 {
+                Text("Add a few more journal entries to unlock personalized insights based on your patterns and birth chart.")
+                    .font(.system(size: 14))
+                    .foregroundColor(Color.white.opacity(0.4))
+                    .italic()
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(red: 0.7, green: 0.6, blue: 0.85).opacity(0.06))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color(red: 0.7, green: 0.6, blue: 0.85).opacity(0.15), lineWidth: 1)
+                )
+        )
+    }
+    
+    // MARK: - AI Generation
+    
+    private func generateJournalInsight() {
+        guard let chart = chart as BirthChart?, let profile = currentProfile, !isLoadingInsight else { return }
+        
+        isLoadingInsight = true
+        let currentCount = journalContexts.count
+        
+        Task {
+            do {
+                let insight = try await AIReadingService.shared.generateJournalInsight(
+                    chart: chart,
+                    profile: profile,
+                    journalEntries: journalContexts
+                )
+                
+                await MainActor.run {
+                    journalInsight = insight
+                    lastInsightEntryCount = currentCount
+                    isLoadingInsight = false
+                }
+            } catch {
+                await MainActor.run {
+                    journalInsight = "Unable to generate insight right now. Please try again later."
+                    lastInsightEntryCount = currentCount
+                    isLoadingInsight = false
+                }
+            }
+        }
+    }
     
     // MARK: - Reading Link (appears under chart)
     
@@ -392,6 +841,59 @@ struct BirthChartView: View {
             }
         }
         .buttonStyle(PlainButtonStyle())
+    }
+    
+    // MARK: - Journal Entry Button
+    
+    private var journalEntryCount: Int {
+        journalContexts.count
+    }
+    
+    private var journalEntryButton: some View {
+        VStack(spacing: 0) {
+            // Main journal action - minimal, text-forward
+            Button(action: { showJournalEntry = true }) {
+                HStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("How are you today?")
+                            .font(.system(size: 20, weight: .light))
+                            .foregroundColor(.white)
+                        
+                        Text("Add a journal entry")
+                            .font(.system(size: 13))
+                            .foregroundColor(Color.white.opacity(0.35))
+                    }
+                    
+                    Spacer()
+                    
+                    // Minimal plus icon
+                    Image(systemName: "plus")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(Color.white.opacity(0.4))
+                }
+                .padding(.vertical, 16)
+                .padding(.horizontal, 4)
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // Journal history link (directly under journal CTA)
+            if journalEntryCount > 0 {
+                Button(action: { showJournalHistory = true }) {
+                    HStack(spacing: 6) {
+                        Text("View \(journalEntryCount) past \(journalEntryCount == 1 ? "entry" : "entries")")
+                            .font(.system(size: 13))
+                        
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .medium))
+                    }
+                    .foregroundColor(Color.white.opacity(0.3))
+                    .padding(.top, 4)
+                    .padding(.leading, 4)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
     }
     
     // MARK: - Header Section

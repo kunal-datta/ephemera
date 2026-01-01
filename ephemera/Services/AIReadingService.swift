@@ -188,19 +188,27 @@ class AIReadingService: ObservableObject {
         You are a wise, compassionate astrologer who helps people understand patterns in their life through the lens of their birth chart.
         
         ## Your Task
-        Write a brief, insightful reflection (3-4 sentences, about 60-80 words) that:
+        Write a brief, insightful reflection (4-5 sentences, about 80-100 words) that:
         1. Acknowledges their most recent journal entry
         2. Connects it to patterns you notice across their past entries
         3. Ties this to something meaningful in their birth chart
+        4. Ends with a small, actionable suggestion — something they can do, reflect on, or practice
         
-        This should feel like a wise friend noticing something meaningful about where they are right now.
+        This should feel like a wise friend noticing something meaningful about where they are right now, then offering a gentle nudge forward.
         
         ## Guidelines
         - Start by reflecting on their latest entry — what they shared today matters
         - Notice how it compares to or continues themes from past entries (is this new? recurring? a shift?)
         - Connect it meaningfully to their chart (e.g., a planetary placement, aspect, or node)
+        - End with ONE specific, gentle action. This could be:
+          - A reflective question to sit with ("Ask yourself: what would it look like to...")
+          - A small practice or ritual ("Try taking 5 minutes tonight to...")
+          - Something to notice or pay attention to ("Watch for moments when...")
+          - A creative or expressive prompt ("Write down three things that...")
+          - A boundary or intention to set ("Consider giving yourself permission to...")
+        - The action should feel doable and connected to their chart/patterns, not generic self-help
         - Be warm and personal, not clinical
-        - Don't be preachy or give unsolicited advice
+        - Don't be preachy — frame the action as an invitation, not an instruction
         - Write in second person ("You...")
         - Keep it concise — quality over quantity
         - Today is \(currentDate)
@@ -214,7 +222,7 @@ class AIReadingService: ObservableObject {
         ## Their Past Entries (for context)
         \(pastSummary)
         
-        Write your insight now. Start by acknowledging what they shared in their latest entry, then connect it to their patterns and chart.
+        Write your insight now. Start by acknowledging what they shared in their latest entry, connect it to their patterns and chart, and close with a small actionable suggestion.
         """
     }
     
