@@ -40,7 +40,6 @@ struct BirthChartView: View {
     @State private var showProfile = false
     @State private var showReading = false
     @State private var showJournalEntry = false
-    @State private var showJournalHistory = false
     @State private var shouldDismissAfterProfileUpdate = false
     @State private var selectedElement: ChartElementSelection?
     @State private var selectedTab: Int = 0 // 0 = Chart, 1 = Journal
@@ -164,11 +163,6 @@ struct BirthChartView: View {
                     // Entry was saved - navigate to Journal tab
                     selectedTab = 1
                 }
-            }
-        }
-        .fullScreenCover(isPresented: $showJournalHistory) {
-            if let profile = currentProfile {
-                JournalHistoryView(profile: profile)
             }
         }
     }
@@ -879,7 +873,7 @@ struct BirthChartView: View {
             
             // Journal history link (directly under journal CTA)
             if journalEntryCount > 0 {
-                Button(action: { showJournalHistory = true }) {
+                Button(action: { selectedTab = 1 }) {
                     HStack(spacing: 6) {
                         Text("View \(journalEntryCount) past \(journalEntryCount == 1 ? "entry" : "entries")")
                             .font(.system(size: 13))
