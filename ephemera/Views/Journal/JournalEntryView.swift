@@ -608,6 +608,9 @@ struct JournalEntryView: View {
             
             // Show insight screen
             await MainActor.run {
+                // Dismiss keyboard first
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                
                 isSaving = false
                 withAnimation(.easeInOut(duration: 0.3)) {
                     showInsightScreen = true
