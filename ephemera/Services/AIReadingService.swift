@@ -19,6 +19,147 @@ enum ReadingType: String {
     case weeklyForecast = "weekly"           // Weekly themes
 }
 
+/// Timeframe for periodic readings
+enum ReadingTimeframe: String, CaseIterable, Codable {
+    case day = "day"
+    case week = "week"
+    case month = "month"
+    case year = "year"
+    
+    var displayTitle: String {
+        switch self {
+        case .day: return "Today"
+        case .week: return "This Week"
+        case .month: return "This Month"
+        case .year: return "This Year"
+        }
+    }
+    
+    var headerTitle: String {
+        switch self {
+        case .day: return "READING OF THE DAY"
+        case .week: return "READING OF THE WEEK"
+        case .month: return "READING OF THE MONTH"
+        case .year: return "READING OF THE YEAR"
+        }
+    }
+    
+    var icon: String {
+        switch self {
+        case .day: return "sun.max"
+        case .week: return "calendar.circle"
+        case .month: return "moon.stars"
+        case .year: return "sparkles"
+        }
+    }
+    
+    var cacheKey: String {
+        "cachedReading_\(rawValue)"
+    }
+    
+    /// Word count target for the reading
+    var wordCount: (min: Int, max: Int) {
+        switch self {
+        case .day: return (100, 150)
+        case .week: return (180, 250)
+        case .month: return (250, 350)
+        case .year: return (350, 450)
+        }
+    }
+    
+    /// How many days this reading covers
+    var daysSpan: Int {
+        switch self {
+        case .day: return 1
+        case .week: return 7
+        case .month: return 30
+        case .year: return 365
+        }
+    }
+    
+    /// Date range description for the reading
+    func dateRangeDescription() -> String {
+        let calendar = Calendar.current
+        let today = Date()
+        let formatter = DateFormatter()
+        
+        switch self {
+        case .day:
+            formatter.dateFormat = "EEEE, MMMM d"
+            return formatter.string(from: today)
+            
+        case .week:
+            let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today)) ?? today
+            let endOfWeek = calendar.date(byAdding: .day, value: 6, to: startOfWeek) ?? today
+            formatter.dateFormat = "MMM d"
+            return "\(formatter.string(from: startOfWeek)) – \(formatter.string(from: endOfWeek))"
+            
+        case .month:
+            formatter.dateFormat = "MMMM yyyy"
+            return formatter.string(from: today)
+            
+        case .year:
+            formatter.dateFormat = "yyyy"
+            return formatter.string(from: today)
+        }
+    }
+    
+    /// Check if a cached reading is still valid
+    func isCacheValid(cachedDate: String) -> Bool {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let calendar = Calendar.current
+        let today = Date()
+        
+        switch self {
+        case .day:
+            return cachedDate == formatter.string(from: today)
+            
+        case .week:
+            // Valid for the same week
+            guard let cached = formatter.date(from: cachedDate) else { return false }
+            let cachedWeek = calendar.component(.weekOfYear, from: cached)
+            let cachedYear = calendar.component(.year, from: cached)
+            let currentWeek = calendar.component(.weekOfYear, from: today)
+            let currentYear = calendar.component(.year, from: today)
+            return cachedWeek == currentWeek && cachedYear == currentYear
+            
+        case .month:
+            // Valid for the same month
+            guard let cached = formatter.date(from: cachedDate) else { return false }
+            let cachedMonth = calendar.component(.month, from: cached)
+            let cachedYear = calendar.component(.year, from: cached)
+            let currentMonth = calendar.component(.month, from: today)
+            let currentYear = calendar.component(.year, from: today)
+            return cachedMonth == currentMonth && cachedYear == currentYear
+            
+        case .year:
+            // Valid for the same year
+            guard let cached = formatter.date(from: cachedDate) else { return false }
+            let cachedYear = calendar.component(.year, from: cached)
+            let currentYear = calendar.component(.year, from: today)
+            return cachedYear == currentYear
+        }
+    }
+}
+
+/// Cached reading with timeframe
+struct CachedTimeframeReading: Codable {
+    let reading: String
+    let date: String // Format: yyyy-MM-dd
+    let timeframe: ReadingTimeframe
+    
+    static var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }
+    
+    var isValid: Bool {
+        timeframe.isCacheValid(cachedDate: date)
+    }
+}
+
 /// A generated reading from the AI
 struct AIReading {
     let type: ReadingType
@@ -221,6 +362,255 @@ class AIReadingService: ObservableObject {
         
         Write your daily reading now. Make it feel like a personal note from the cosmos, written just for them, for today.
         """
+    }
+    
+    // MARK: - Generate Timeframe Reading
+    
+    /// Generates a reading for a specific timeframe (day, week, month, year)
+    func generateTimeframeReading(
+        timeframe: ReadingTimeframe,
+        chart: BirthChart,
+        profile: UserProfile,
+        contexts: [UserContext]
+    ) async throws -> String {
+        // Get transits appropriate for the timeframe
+        let transits = getTransitsForTimeframe(timeframe: timeframe, chart: chart)
+        
+        let prompt = buildTimeframeReadingPrompt(
+            timeframe: timeframe,
+            chart: chart,
+            profile: profile,
+            contexts: contexts,
+            transits: transits
+        )
+        
+        let response = try await model.generateContent(prompt)
+        
+        guard let text = response.text else {
+            throw AIReadingError.noResponse
+        }
+        
+        return text
+    }
+    
+    /// Get transits relevant to a specific timeframe
+    private func getTransitsForTimeframe(timeframe: ReadingTimeframe, chart: BirthChart) -> [TransitAspect] {
+        let calendar = Calendar.current
+        let today = Date()
+        
+        switch timeframe {
+        case .day:
+            // Just today's transits
+            return ChartCore.shared.getSignificantTransits(natalChart: chart, transitDate: today, limit: 4)
+            
+        case .week:
+            // Get transits for the week, sampling a few days
+            var allTransits: [TransitAspect] = []
+            for dayOffset in stride(from: 0, through: 6, by: 2) {
+                if let date = calendar.date(byAdding: .day, value: dayOffset, to: today) {
+                    let transits = ChartCore.shared.getSignificantTransits(natalChart: chart, transitDate: date, limit: 3)
+                    allTransits.append(contentsOf: transits)
+                }
+            }
+            // Remove duplicates and sort by significance
+            let uniqueTransits = removeDuplicateTransits(allTransits)
+            return Array(uniqueTransits.sorted { $0.significance > $1.significance }.prefix(6))
+            
+        case .month:
+            // Sample transits throughout the month
+            var allTransits: [TransitAspect] = []
+            for dayOffset in stride(from: 0, through: 28, by: 7) {
+                if let date = calendar.date(byAdding: .day, value: dayOffset, to: today) {
+                    let transits = ChartCore.shared.getSignificantTransits(natalChart: chart, transitDate: date, limit: 4)
+                    allTransits.append(contentsOf: transits)
+                }
+            }
+            let uniqueTransits = removeDuplicateTransits(allTransits)
+            return Array(uniqueTransits.sorted { $0.significance > $1.significance }.prefix(8))
+            
+        case .year:
+            // Sample transits throughout the year, focusing on outer planet transits
+            var allTransits: [TransitAspect] = []
+            for monthOffset in 0..<12 {
+                if let date = calendar.date(byAdding: .month, value: monthOffset, to: today) {
+                    let transits = ChartCore.shared.calculateTransits(natalChart: chart, transitDate: date)
+                    // Filter for outer planet transits which are more significant for yearly readings
+                    let outerTransits = transits.filter { 
+                        $0.transitingPlanet == .saturn || 
+                        $0.transitingPlanet == .jupiter ||
+                        $0.transitingPlanet == .uranus ||
+                        $0.transitingPlanet == .neptune ||
+                        $0.transitingPlanet == .pluto ||
+                        $0.transitingPlanet == .northNode
+                    }
+                    allTransits.append(contentsOf: outerTransits.prefix(3))
+                }
+            }
+            let uniqueTransits = removeDuplicateTransits(allTransits)
+            return Array(uniqueTransits.sorted { $0.significance > $1.significance }.prefix(10))
+        }
+    }
+    
+    /// Remove duplicate transits (same transiting planet to same natal planet)
+    private func removeDuplicateTransits(_ transits: [TransitAspect]) -> [TransitAspect] {
+        var seen = Set<String>()
+        var unique: [TransitAspect] = []
+        
+        for transit in transits {
+            let key = "\(transit.transitingPlanet.rawValue)-\(transit.natalPlanet.rawValue)"
+            if !seen.contains(key) {
+                seen.insert(key)
+                unique.append(transit)
+            }
+        }
+        
+        return unique
+    }
+    
+    private func buildTimeframeReadingPrompt(
+        timeframe: ReadingTimeframe,
+        chart: BirthChart,
+        profile: UserProfile,
+        contexts: [UserContext],
+        transits: [TransitAspect]
+    ) -> String {
+        let chartSummary = buildChartSummary(chart: chart)
+        let contextSummary = contexts.recentEntries(5).formattedForPrompt()
+        let transitSummary = formatTransitsForTimeframe(transits: transits, timeframe: timeframe)
+        let dateRange = timeframe.dateRangeDescription()
+        let wordCount = timeframe.wordCount
+        
+        let timeframeGuidance: String
+        let focusAreas: String
+        
+        switch timeframe {
+        case .day:
+            timeframeGuidance = "This is a daily reading for \(dateRange). Focus on the immediate energy of today."
+            focusAreas = """
+            - The emotional tone of the day
+            - One or two key themes to be aware of
+            - A small, actionable insight to carry with them
+            """
+            
+        case .week:
+            timeframeGuidance = "This is a weekly reading for \(dateRange). Paint a picture of the week's unfolding energy."
+            focusAreas = """
+            - The overall arc of the week's energy
+            - Key days or moments to watch for
+            - 2-3 themes that will be prominent
+            - How different areas of life might be affected
+            - A guiding intention for the week
+            """
+            
+        case .month:
+            timeframeGuidance = "This is a monthly reading for \(dateRange). Explore the broader themes and opportunities of this month."
+            focusAreas = """
+            - The overarching theme of the month
+            - Key transits and what they're activating
+            - Areas of growth and challenge
+            - Relationships, career, inner work — what's highlighted?
+            - The emotional and spiritual undercurrent
+            - A monthly intention or practice to consider
+            """
+            
+        case .year:
+            timeframeGuidance = "This is a yearly reading for \(dateRange). Offer a sweeping view of the year's major themes and evolutionary opportunities."
+            focusAreas = """
+            - The year's overarching narrative and themes
+            - Major planetary transits and their significance
+            - Key periods of change, growth, or challenge
+            - Areas of life being transformed
+            - The soul's evolutionary invitation for this year
+            - Long-term patterns being activated
+            - A guiding word or intention for the year
+            """
+        }
+        
+        return """
+        You are a wise, compassionate evolutionary astrologer delivering a personalized \(timeframe.rawValue)ly reading.
+        
+        ## Your Task
+        Write a focused, personal reading (\(wordCount.min)-\(wordCount.max) words) that:
+        1. Feels timely and specific to this \(timeframe.rawValue)
+        2. Weaves together their natal chart with current/upcoming transits
+        3. Offers meaningful insight without being generic
+        4. Empowers them to work with the energy consciously
+        
+        ## Timeframe Context
+        \(timeframeGuidance)
+        
+        ## Focus Areas
+        \(focusAreas)
+        
+        ## Guidelines
+        - Write in second person ("You...")
+        - Don't use headers or bullet points — flowing prose only
+        - Be specific about WHICH transits are affecting WHICH parts of their chart
+        - Never fear-monger — frame challenges as opportunities for growth
+        - Make it feel personal to their unique chart, not generic horoscope advice
+        - Start with an evocative opening that captures the \(timeframe.rawValue)'s energy
+        - End with something inspiring or actionable
+        - DO NOT greet them by name or say "Hi \(profile.name)"
+        
+        ## Their Birth Chart
+        \(chartSummary)
+        
+        ## Transits for This \(timeframe.displayTitle)
+        \(transitSummary)
+        
+        ## Recent Context They've Shared
+        \(contextSummary)
+        
+        Write your \(timeframe.rawValue)ly reading now. Make it feel like a personal message from the cosmos, written just for them.
+        """
+    }
+    
+    private func formatTransitsForTimeframe(transits: [TransitAspect], timeframe: ReadingTimeframe) -> String {
+        guard !transits.isEmpty else { 
+            return "The cosmic weather is relatively quiet this \(timeframe.rawValue), allowing for integration and rest."
+        }
+        
+        var result = "Key transits for this \(timeframe.rawValue):\n\n"
+        
+        for transit in transits {
+            let transitPlanetStr = "\(transit.transitingPlanet.rawValue) in \(transit.transitingPosition.sign.rawValue)"
+            let natalPlanetStr = "natal \(transit.natalPlanet.rawValue) in \(transit.natalPosition.sign.rawValue)"
+            let orbStr = String(format: "%.1f", transit.orb)
+            
+            result += "• \(transitPlanetStr) \(transit.aspectType.rawValue.lowercased()) \(natalPlanetStr) (\(orbStr)° orb)\n"
+            result += "  → \(transitInterpretationHint(transit))\n\n"
+        }
+        
+        return result
+    }
+    
+    private func transitInterpretationHint(_ transit: TransitAspect) -> String {
+        switch transit.transitingPlanet {
+        case .saturn:
+            return "Themes of responsibility, structure, limitations, maturity, or karma"
+        case .jupiter:
+            return "Themes of expansion, opportunity, growth, or excess"
+        case .pluto:
+            return "Deep transformation, power dynamics, rebirth, or intensity"
+        case .neptune:
+            return "Spirituality, dreams, confusion, idealism, or dissolution"
+        case .uranus:
+            return "Sudden changes, liberation, awakening, or disruption"
+        case .mars:
+            return "Energy, action, conflict, drive, or assertion"
+        case .venus:
+            return "Relationships, values, beauty, pleasure, or harmony"
+        case .mercury:
+            return "Communication, thinking, short trips, or decisions"
+        case .sun:
+            return "Vitality, identity focus, recognition, or self-expression"
+        case .moon:
+            return "Emotional shifts, needs, home, or instinctive reactions"
+        case .northNode:
+            return "Karmic direction, growth opportunities, fated encounters"
+        default:
+            return "Significant energy activation"
+        }
     }
     
     // MARK: - Generate Journal Insight
@@ -657,4 +1047,3 @@ enum AIReadingError: LocalizedError {
         }
     }
 }
-

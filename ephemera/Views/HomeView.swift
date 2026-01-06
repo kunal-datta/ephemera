@@ -8,25 +8,6 @@
 import SwiftUI
 import SwiftData
 
-// MARK: - Daily Reading Cache
-
-/// Stores the daily reading with its date for caching
-struct CachedDailyReading: Codable {
-    let reading: String
-    let date: String // Format: yyyy-MM-dd
-    
-    static var dateFormatter: DateFormatter {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }
-    
-    var isFromToday: Bool {
-        let todayString = CachedDailyReading.dateFormatter.string(from: Date())
-        return date == todayString
-    }
-}
-
 struct HomeView: View {
     @Query private var profiles: [UserProfile]
     @Query private var birthCharts: [BirthChart]
@@ -40,11 +21,6 @@ struct HomeView: View {
     @State private var generatedChart: BirthChart?
     @State private var errorMessage: String?
     @State private var showError = false
-    
-    // Daily reading state
-    @State private var dailyReading: String?
-    @State private var isLoadingReading = false
-    @State private var readingError: String?
     
     // Animation state
     @State private var contentAppeared = false
@@ -92,13 +68,27 @@ struct HomeView: View {
                         .padding(.top, 8)
                         .padding(.bottom, 28)
                     
-                    // Reading of the Day
-                    readingOfTheDayCard
+                    // Swipeable Reading Cards (Day, Week, Month, Year)
+                    if let chart = currentChart, let profile = currentProfile {
+                        CompactTimeframeReadingView(
+                            chart: chart,
+                            profile: profile,
+                            contexts: userContexts
+                        )
                         .padding(.horizontal, 20)
                         .padding(.bottom, 20)
                         .opacity(contentAppeared ? 1 : 0)
                         .offset(y: contentAppeared ? 0 : 20)
                         .animation(.easeOut(duration: 0.5).delay(0.1), value: contentAppeared)
+                    } else {
+                        // Placeholder when no chart exists
+                        noChartReadingCard
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 20)
+                            .opacity(contentAppeared ? 1 : 0)
+                            .offset(y: contentAppeared ? 0 : 20)
+                            .animation(.easeOut(duration: 0.5).delay(0.1), value: contentAppeared)
+                    }
                     
                     // Journal prompt
                     journalPromptCard
@@ -157,7 +147,6 @@ struct HomeView: View {
         .preferredColorScheme(.dark)
         .onAppear {
             contentAppeared = true
-            loadDailyReading()
         }
     }
     
@@ -193,9 +182,9 @@ struct HomeView: View {
         }
     }
     
-    // MARK: - Reading of the Day Card
+    // MARK: - No Chart Reading Card
     
-    private var readingOfTheDayCard: some View {
+    private var noChartReadingCard: some View {
         VStack(alignment: .leading, spacing: 16) {
             // Header
             HStack(spacing: 10) {
@@ -203,7 +192,7 @@ struct HomeView: View {
                     .font(.system(size: 14))
                     .foregroundColor(Color(red: 0.7, green: 0.6, blue: 0.85))
                 
-                Text("READING OF THE DAY")
+                Text("YOUR COSMIC READINGS")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(Color.white.opacity(0.5))
                     .tracking(1.5)
@@ -212,44 +201,32 @@ struct HomeView: View {
             }
             
             // Content
-            if isLoadingReading {
-                HStack(spacing: 12) {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                    Text("Reading the stars...")
-                        .font(.system(size: 14))
-                        .foregroundColor(Color.white.opacity(0.4))
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 20)
-            } else if let reading = dailyReading {
-                Text(reading)
-                    .font(.system(size: 15, weight: .regular))
-                    .foregroundColor(Color.white.opacity(0.8))
-                    .lineSpacing(6)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else if let error = readingError {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Unable to load today's reading")
-                        .font(.system(size: 14))
-                        .foregroundColor(Color.white.opacity(0.5))
-                    
-                    Button(action: { loadDailyReading(forceRefresh: true) }) {
-                        Text("Try again")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(Color(red: 0.7, green: 0.6, blue: 0.85))
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Unlock personalized readings")
+                    .font(.custom("Georgia", size: 17))
+                    .foregroundColor(Color.white.opacity(0.85))
+                
+                Text("Generate your birth chart to receive daily, weekly, monthly, and yearly readings based on your unique cosmic blueprint and current planetary transits.")
+                    .font(.system(size: 14))
+                    .foregroundColor(Color.white.opacity(0.5))
+                    .lineSpacing(4)
+                
+                // Timeframe preview
+                HStack(spacing: 16) {
+                    ForEach(ReadingTimeframe.allCases, id: \.self) { timeframe in
+                        VStack(spacing: 6) {
+                            Image(systemName: timeframe.icon)
+                                .font(.system(size: 18))
+                                .foregroundColor(iconColor(for: timeframe).opacity(0.5))
+                            
+                            Text(timeframe.displayTitle)
+                                .font(.system(size: 10))
+                                .foregroundColor(Color.white.opacity(0.35))
+                        }
                     }
                 }
-            } else if currentChart == nil {
-                Text("Generate your birth chart to unlock personalized daily readings")
-                    .font(.system(size: 14))
-                    .foregroundColor(Color.white.opacity(0.45))
-                    .italic()
-            } else {
-                Text("Your daily guidance is on its way...")
-                    .font(.system(size: 14))
-                    .foregroundColor(Color.white.opacity(0.45))
-                    .italic()
+                .frame(maxWidth: .infinity)
+                .padding(.top, 8)
             }
         }
         .padding(20)
@@ -272,6 +249,19 @@ struct HomeView: View {
                         )
                 )
         )
+    }
+    
+    private func iconColor(for timeframe: ReadingTimeframe) -> Color {
+        switch timeframe {
+        case .day:
+            return Color(red: 0.95, green: 0.75, blue: 0.4)
+        case .week:
+            return Color(red: 0.5, green: 0.7, blue: 0.9)
+        case .month:
+            return Color(red: 0.7, green: 0.6, blue: 0.85)
+        case .year:
+            return Color(red: 0.9, green: 0.6, blue: 0.7)
+        }
     }
     
     // MARK: - Journal Prompt Card
@@ -389,56 +379,6 @@ struct HomeView: View {
         .opacity(currentProfile == nil ? 0.5 : 1)
     }
     
-    // MARK: - Daily Reading Logic
-    
-    private func loadDailyReading(forceRefresh: Bool = false) {
-        guard let chart = currentChart, let profile = currentProfile else { return }
-        
-        // Check cached reading first
-        if !forceRefresh, let cached = loadCachedReading(), cached.isFromToday {
-            dailyReading = cached.reading
-            return
-        }
-        
-        // Generate new reading
-        isLoadingReading = true
-        readingError = nil
-        
-        Task {
-            do {
-                let reading = try await AIReadingService.shared.generateDailyReading(
-                    chart: chart,
-                    profile: profile,
-                    contexts: userContexts
-                )
-                
-                await MainActor.run {
-                    dailyReading = reading
-                    isLoadingReading = false
-                    saveCachedReading(reading)
-                }
-            } catch {
-                await MainActor.run {
-                    readingError = error.localizedDescription
-                    isLoadingReading = false
-                }
-            }
-        }
-    }
-    
-    private func loadCachedReading() -> CachedDailyReading? {
-        guard let data = UserDefaults.standard.data(forKey: "cachedDailyReading") else { return nil }
-        return try? JSONDecoder().decode(CachedDailyReading.self, from: data)
-    }
-    
-    private func saveCachedReading(_ reading: String) {
-        let todayString = CachedDailyReading.dateFormatter.string(from: Date())
-        let cached = CachedDailyReading(reading: reading, date: todayString)
-        if let data = try? JSONEncoder().encode(cached) {
-            UserDefaults.standard.set(data, forKey: "cachedDailyReading")
-        }
-    }
-    
     // MARK: - Chart Actions
     
     private func handleSeeMyChart() {
@@ -498,9 +438,6 @@ struct HomeView: View {
                     
                     generatedChart = chart
                     showChart = true
-                    
-                    // Now that we have a chart, load the daily reading
-                    loadDailyReading()
                 } else {
                     errorMessage = "Failed to create birth chart from calculation"
                     showError = true
