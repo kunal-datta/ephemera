@@ -304,6 +304,27 @@ class FirestoreService {
         print("✅ All user contexts deleted from Firestore for userId: \(userId)")
     }
     
+    /// Deletes all user data from Firestore (profile, charts, contexts) and the Firebase Auth account
+    func deleteUserAccount() async throws {
+        guard let user = Auth.auth().currentUser else {
+            throw FirestoreError.notAuthenticated
+        }
+        
+        let userId = user.uid
+        
+        // Delete all subcollections first
+        try await deleteAllBirthCharts()
+        try await deleteAllUserContexts()
+        
+        // Delete the user document
+        try await db.collection("users").document(userId).delete()
+        print("✅ User document deleted from Firestore for userId: \(userId)")
+        
+        // Delete the Firebase Auth account
+        try await user.delete()
+        print("✅ Firebase Auth account deleted for userId: \(userId)")
+    }
+    
     private func parseUserContext(from data: [String: Any]) -> UserContext? {
         guard let idString = data["id"] as? String,
               let id = UUID(uuidString: idString),
@@ -393,4 +414,3 @@ enum FirestoreError: LocalizedError {
         }
     }
 }
-

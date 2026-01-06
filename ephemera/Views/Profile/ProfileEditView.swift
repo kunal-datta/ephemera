@@ -14,6 +14,8 @@ struct ProfileEditView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query private var birthCharts: [BirthChart]
+    @Query private var profiles: [UserProfile]
+    @Query private var contexts: [UserContext]
     
     let profile: UserProfile
     var onProfileUpdated: (() -> Void)?
@@ -33,6 +35,10 @@ struct ProfileEditView: View {
     @State private var showSaveSuccess = false
     @State private var errorMessage: String?
     @State private var showError = false
+    
+    // Delete account state
+    @State private var showDeleteConfirmation = false
+    @State private var isDeleting = false
     
     // Place search
     @StateObject private var placesService = PlacesService.shared
@@ -121,6 +127,50 @@ struct ProfileEditView: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 8)
                     
+                    // Danger Zone - Delete Account
+                    VStack(spacing: 16) {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.06))
+                            .frame(height: 1)
+                            .padding(.horizontal, 24)
+                        
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("DANGER ZONE")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(Color(red: 0.9, green: 0.4, blue: 0.4).opacity(0.7))
+                                .tracking(2)
+                            
+                            Button(action: { showDeleteConfirmation = true }) {
+                                HStack(spacing: 12) {
+                                    if isDeleting {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: Color(red: 0.9, green: 0.4, blue: 0.4)))
+                                            .scaleEffect(0.8)
+                                    } else {
+                                        Image(systemName: "trash")
+                                            .font(.system(size: 16))
+                                    }
+                                    Text(isDeleting ? "Deleting..." : "Delete Account")
+                                        .font(.system(size: 16, weight: .medium))
+                                }
+                                .foregroundColor(Color(red: 0.9, green: 0.4, blue: 0.4))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 54)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .fill(Color(red: 0.9, green: 0.4, blue: 0.4).opacity(0.1))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 14)
+                                                .stroke(Color(red: 0.9, green: 0.4, blue: 0.4).opacity(0.3), lineWidth: 1)
+                                        )
+                                )
+                            }
+                            .disabled(isDeleting || isSaving)
+                        }
+                        .padding(.horizontal, 24)
+                    }
+                    .padding(.top, 24)
+                    
                     Spacer(minLength: 40)
                 }
             }
@@ -157,6 +207,14 @@ struct ProfileEditView: View {
             }
         } message: {
             Text("Your profile and chart have been updated!")
+        }
+        .alert("Delete Account?", isPresented: $showDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                deleteAccount()
+            }
+        } message: {
+            Text("This will permanently delete all your data including your profile, birth chart, journal entries, and readings. This action cannot be undone.")
         }
     }
     
@@ -646,6 +704,50 @@ struct ProfileEditView: View {
             }
         }
     }
+    
+    private func deleteAccount() {
+        isDeleting = true
+        
+        Task {
+            do {
+                // Delete from Firestore and Firebase Auth
+                try await FirestoreService.shared.deleteUserAccount()
+                
+                // Delete all local data
+                await MainActor.run {
+                    // Delete all birth charts
+                    for chart in birthCharts {
+                        modelContext.delete(chart)
+                    }
+                    
+                    // Delete all contexts
+                    for context in contexts {
+                        modelContext.delete(context)
+                    }
+                    
+                    // Delete all profiles
+                    for profile in profiles {
+                        modelContext.delete(profile)
+                    }
+                    
+                    // Clear cached daily reading
+                    UserDefaults.standard.removeObject(forKey: "cachedDailyReading")
+                    
+                    isDeleting = false
+                    
+                    // Dismiss the view - the app will automatically show WelcomeView
+                    // because profiles will be empty
+                    dismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    isDeleting = false
+                    errorMessage = "Failed to delete account: \(error.localizedDescription)"
+                    showError = true
+                }
+            }
+        }
+    }
 }
 
 #Preview {
@@ -660,4 +762,3 @@ struct ProfileEditView: View {
         )
     }
 }
-
