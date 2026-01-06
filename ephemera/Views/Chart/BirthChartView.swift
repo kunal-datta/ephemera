@@ -46,6 +46,10 @@ struct BirthChartView: View {
     @State private var journalInsight: String?
     @State private var isLoadingInsight = false
     @State private var lastInsightEntryCount = 0
+    @State private var conversations: [ReadingConversation] = []
+    @State private var isLoadingConversations = false
+    @State private var selectedConversation: ReadingConversation?
+    @State private var showingChatFromJournal = false
     
     private var currentProfile: UserProfile? {
         profiles.first
@@ -165,6 +169,18 @@ struct BirthChartView: View {
                 }
             }
         }
+        .fullScreenCover(isPresented: $showingChatFromJournal) {
+            if let conversation = selectedConversation, let profile = currentProfile {
+                ReadingChatView(
+                    timeframe: conversation.timeframe,
+                    readingContent: conversation.readingContent,
+                    chart: chart,
+                    profile: profile,
+                    contexts: userContexts,
+                    existingConversation: conversation
+                )
+            }
+        }
     }
     
     // MARK: - Segmented Control
@@ -279,6 +295,11 @@ struct BirthChartView: View {
                     // AI Insight
                     journalAIInsight
                     
+                    // Recent Chats
+                    if !conversations.isEmpty {
+                        journalChatsSection
+                    }
+                    
                     // Entries
                     LazyVStack(spacing: 12) {
                         ForEach(journalContexts, id: \.id) { entry in
@@ -293,6 +314,7 @@ struct BirthChartView: View {
             .padding(.top, 8)
         }
         .onAppear {
+            loadConversations()
             if journalContexts.count >= 2 && (journalInsight == nil || lastInsightEntryCount != journalContexts.count) {
                 generateJournalInsight()
             }
@@ -914,6 +936,69 @@ struct BirthChartView: View {
                         .stroke(Color(red: 0.7, green: 0.6, blue: 0.85).opacity(0.15), lineWidth: 1)
                 )
         )
+    }
+    
+    // MARK: - Journal Chats Section
+    
+    private var journalChatsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(red: 0.95, green: 0.75, blue: 0.4))
+                
+                Text("Recent Chats")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(Color.white.opacity(0.5))
+                
+                Spacer()
+                
+                Text("\(conversations.count)")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Color.white.opacity(0.3))
+            }
+            
+            LazyVStack(spacing: 10) {
+                ForEach(conversations.prefix(3), id: \.id) { conversation in
+                    JournalChatCard(
+                        conversation: conversation,
+                        onTap: {
+                            selectedConversation = conversation
+                            showingChatFromJournal = true
+                        }
+                    )
+                }
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white.opacity(0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                )
+        )
+    }
+    
+    private func loadConversations() {
+        guard !isLoadingConversations else { return }
+        isLoadingConversations = true
+        
+        Task {
+            do {
+                let fetched = try await FirestoreService.shared.fetchAllConversations()
+                await MainActor.run {
+                    conversations = fetched
+                    isLoadingConversations = false
+                }
+            } catch {
+                print("❌ Failed to load conversations: \(error)")
+                await MainActor.run {
+                    isLoadingConversations = false
+                }
+            }
+        }
     }
     
     // MARK: - AI Generation
@@ -1996,6 +2081,86 @@ struct JournalStatCard: View {
                         .stroke(Color.white.opacity(0.06), lineWidth: 1)
                 )
         )
+    }
+}
+
+// MARK: - Journal Chat Card
+
+struct JournalChatCard: View {
+    let conversation: ReadingConversation
+    let onTap: () -> Void
+    
+    private var accentColor: Color {
+        switch conversation.timeframe {
+        case .day: return Color(red: 0.95, green: 0.75, blue: 0.4)
+        case .week: return Color(red: 0.5, green: 0.7, blue: 0.9)
+        case .month: return Color(red: 0.7, green: 0.6, blue: 0.85)
+        case .year: return Color(red: 0.9, green: 0.6, blue: 0.7)
+        }
+    }
+    
+    private var formattedDate: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return formatter.string(from: conversation.createdAt)
+    }
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                // Icon
+                ZStack {
+                    Circle()
+                        .fill(accentColor.opacity(0.15))
+                        .frame(width: 32, height: 32)
+                    
+                    Image(systemName: conversation.timeframe.icon)
+                        .font(.system(size: 12))
+                        .foregroundColor(accentColor)
+                }
+                
+                // Content
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Text("\(conversation.timeframe.displayTitle) Reading")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.white)
+                        
+                        Spacer()
+                        
+                        Text(formattedDate)
+                            .font(.system(size: 11))
+                            .foregroundColor(Color.white.opacity(0.35))
+                    }
+                    
+                    if let summary = conversation.summary, !summary.isEmpty {
+                        Text(summary)
+                            .font(.system(size: 12))
+                            .foregroundColor(Color.white.opacity(0.5))
+                            .lineLimit(1)
+                    } else {
+                        Text("\(conversation.messages.count) messages")
+                            .font(.system(size: 12))
+                            .foregroundColor(Color.white.opacity(0.4))
+                    }
+                }
+                
+                // Status
+                Circle()
+                    .fill(conversation.isClosed ? Color.white.opacity(0.2) : accentColor)
+                    .frame(width: 6, height: 6)
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.white.opacity(0.03))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(accentColor.opacity(0.15), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 }
 

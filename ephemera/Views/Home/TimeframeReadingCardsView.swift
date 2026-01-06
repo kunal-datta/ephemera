@@ -13,6 +13,13 @@ import SwiftUI
 // MARK: - Compact Reading Card (for HomeView)
 
 /// A more compact version of the reading cards for the home screen
+/// Data to pass to chat view
+struct ChatPresentationData: Identifiable {
+    let id = UUID()
+    let timeframe: ReadingTimeframe
+    let reading: String
+}
+
 struct CompactTimeframeReadingView: View {
     let chart: BirthChart
     let profile: UserProfile
@@ -22,11 +29,16 @@ struct CompactTimeframeReadingView: View {
     @State private var readings: [ReadingTimeframe: String] = [:]
     @State private var loadingStates: [ReadingTimeframe: Bool] = [:]
     @State private var errorStates: [ReadingTimeframe: String?] = [:]
+    @State private var chatPresentation: ChatPresentationData? = nil
     
     private let timeframes = ReadingTimeframe.allCases
     
     private var currentTimeframe: ReadingTimeframe {
         timeframes[currentIndex]
+    }
+    
+    private var currentReading: String? {
+        readings[currentTimeframe]
     }
     
     var body: some View {
@@ -41,7 +53,15 @@ struct CompactTimeframeReadingView: View {
                 reading: readings[currentTimeframe],
                 isLoading: loadingStates[currentTimeframe] ?? false,
                 error: errorStates[currentTimeframe] ?? nil,
-                onRetry: { loadReading(for: currentTimeframe, forceRefresh: true) }
+                onRetry: { loadReading(for: currentTimeframe, forceRefresh: true) },
+                onChat: {
+                    if let reading = currentReading {
+                        chatPresentation = ChatPresentationData(
+                            timeframe: currentTimeframe,
+                            reading: reading
+                        )
+                    }
+                }
             )
             .id(currentIndex) // Force view recreation on index change
             .transition(.opacity.combined(with: .scale(scale: 0.98)))
@@ -68,6 +88,19 @@ struct CompactTimeframeReadingView: View {
         }
         .onAppear {
             loadAllReadings()
+        }
+        .fullScreenCover(item: $chatPresentation) { data in
+            NavigationStack {
+                ReadingChatView(
+                    timeframe: data.timeframe,
+                    readingContent: data.reading,
+                    chart: chart,
+                    profile: profile,
+                    contexts: contexts
+                )
+                .navigationBarHidden(true)
+                .toolbar(.hidden, for: .navigationBar)
+            }
         }
     }
     
@@ -185,6 +218,9 @@ struct CompactReadingCard: View {
     let isLoading: Bool
     let error: String?
     let onRetry: () -> Void
+    let onChat: () -> Void
+    
+    @StateObject private var conversationManager = ConversationManager.shared
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -221,15 +257,46 @@ struct CompactReadingCard: View {
                 placeholderView
             }
             
-            // Swipe hint
+            // Footer: Chat button + Swipe hint
             HStack {
+                // Chat button (only show when reading is available)
+                if reading != nil {
+                    Button(action: onChat) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "bubble.left.and.bubble.right")
+                                .font(.system(size: 11))
+                            Text("Explore this")
+                                .font(.system(size: 11, weight: .medium))
+                            if conversationManager.remainingMessages > 0 {
+                                Text("(\(conversationManager.remainingMessages))")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(iconColor.opacity(0.6))
+                            }
+                        }
+                        .foregroundColor(iconColor)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(
+                            Capsule()
+                                .fill(iconColor.opacity(0.12))
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .disabled(!conversationManager.canSendMessage)
+                    .opacity(conversationManager.canSendMessage ? 1 : 0.5)
+                }
+                
                 Spacer()
-                Text("Swipe for more readings")
-                    .font(.system(size: 10))
-                    .foregroundColor(Color.white.opacity(0.25))
-                Image(systemName: "chevron.left.chevron.right")
-                    .font(.system(size: 8))
-                    .foregroundColor(Color.white.opacity(0.2))
+                
+                // Swipe hint
+                HStack(spacing: 4) {
+                    Text("Swipe for more")
+                        .font(.system(size: 10))
+                        .foregroundColor(Color.white.opacity(0.25))
+                    Image(systemName: "chevron.left.chevron.right")
+                        .font(.system(size: 8))
+                        .foregroundColor(Color.white.opacity(0.2))
+                }
             }
             .padding(.top, 4)
         }
@@ -319,7 +386,8 @@ struct CompactReadingCard: View {
                     reading: "The Moon in your sign today brings heightened emotional awareness. You may find yourself more sensitive to the energies around you, picking up on subtle shifts in your environment and relationships. This is an excellent day for introspection and creative work.",
                     isLoading: false,
                     error: nil,
-                    onRetry: {}
+                    onRetry: {},
+                    onChat: {}
                 )
                 .padding(.horizontal, 20)
                 
@@ -328,7 +396,8 @@ struct CompactReadingCard: View {
                     reading: "January 2026 arrives like a breath of fresh air, a clarity emerging from the depths. With your Sagittarian Sun, Moon, Mars and Mercury all residing in your first house, you're used to embodying the energy of initiation, always ready to begin something new.",
                     isLoading: false,
                     error: nil,
-                    onRetry: {}
+                    onRetry: {},
+                    onChat: {}
                 )
                 .padding(.horizontal, 20)
             }

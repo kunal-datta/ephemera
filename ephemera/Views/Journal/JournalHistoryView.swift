@@ -22,6 +22,10 @@ struct JournalHistoryView: View {
     @State private var isLoadingInsight = false
     @State private var lastInsightEntryCount = 0
     @State private var showNewEntry = false
+    @State private var conversations: [ReadingConversation] = []
+    @State private var isLoadingConversations = false
+    @State private var selectedConversation: ReadingConversation?
+    @State private var showingChat = false
     
     private var userContexts: [UserContext] {
         allContexts
@@ -49,18 +53,25 @@ struct JournalHistoryView: View {
                     .padding(.bottom, 24)
                 
                 // Content
-                if userContexts.isEmpty {
-                    emptyState
-                } else {
-                    TabView(selection: $selectedTab) {
+                TabView(selection: $selectedTab) {
+                    // Entries tab
+                    if userContexts.isEmpty && selectedTab == 0 {
+                        emptyState
+                            .tag(0)
+                    } else {
                         entriesListView
                             .tag(0)
-                        
-                        insightsView
-                            .tag(1)
                     }
-                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    
+                    // Chats tab
+                    chatsListView
+                        .tag(1)
+                    
+                    // Insights tab
+                    insightsView
+                        .tag(2)
                 }
+                .tabViewStyle(.page(indexDisplayMode: .never))
             }
         }
         .preferredColorScheme(.dark)
@@ -68,6 +79,21 @@ struct JournalHistoryView: View {
             JournalEntryView(profile: profile) {
                 // Entry saved - will auto-refresh via @Query
             }
+        }
+        .fullScreenCover(isPresented: $showingChat) {
+            if let conversation = selectedConversation, let chart = currentChart {
+                ReadingChatView(
+                    timeframe: conversation.timeframe,
+                    readingContent: conversation.readingContent,
+                    chart: chart,
+                    profile: profile,
+                    contexts: Array(allContexts.filter { $0.userId == profile.id }),
+                    existingConversation: conversation
+                )
+            }
+        }
+        .onAppear {
+            loadConversations()
         }
     }
     
@@ -114,7 +140,8 @@ struct JournalHistoryView: View {
     private var tabPicker: some View {
         HStack(spacing: 0) {
             tabButton(title: "Entries", index: 0)
-            tabButton(title: "Insights", index: 1)
+            tabButton(title: "Chats", index: 1)
+            tabButton(title: "Insights", index: 2)
         }
         .padding(3)
         .background(
@@ -185,6 +212,76 @@ struct JournalHistoryView: View {
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 40)
+        }
+    }
+    
+    // MARK: - Chats List
+    
+    private var chatsListView: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 16) {
+                if isLoadingConversations {
+                    ProgressView()
+                        .padding(.top, 40)
+                } else if conversations.isEmpty {
+                    emptyChatsState
+                } else {
+                    LazyVStack(spacing: 12) {
+                        ForEach(conversations, id: \.id) { conversation in
+                            ChatHistoryCard(
+                                conversation: conversation,
+                                onTap: {
+                                    selectedConversation = conversation
+                                    showingChat = true
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 40)
+        }
+    }
+    
+    private var emptyChatsState: some View {
+        VStack(spacing: 16) {
+            Spacer()
+                .frame(height: 60)
+            
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 40, weight: .light))
+                .foregroundColor(Color.white.opacity(0.3))
+            
+            Text("No chats yet")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundColor(.white)
+            
+            Text("Explore your readings to start a conversation")
+                .font(.system(size: 14))
+                .foregroundColor(Color.white.opacity(0.4))
+                .multilineTextAlignment(.center)
+            
+            Spacer()
+        }
+    }
+    
+    private func loadConversations() {
+        isLoadingConversations = true
+        
+        Task {
+            do {
+                let fetched = try await FirestoreService.shared.fetchAllConversations()
+                await MainActor.run {
+                    conversations = fetched
+                    isLoadingConversations = false
+                }
+            } catch {
+                print("❌ Failed to load conversations: \(error)")
+                await MainActor.run {
+                    isLoadingConversations = false
+                }
+            }
         }
     }
     
@@ -1374,6 +1471,166 @@ struct FocusAreasOverTimeChartContent: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Chat History Card
+
+struct ChatHistoryCard: View {
+    let conversation: ReadingConversation
+    let onTap: () -> Void
+    
+    private var accentColor: Color {
+        switch conversation.timeframe {
+        case .day:
+            return Color(red: 0.95, green: 0.75, blue: 0.4)
+        case .week:
+            return Color(red: 0.5, green: 0.7, blue: 0.9)
+        case .month:
+            return Color(red: 0.7, green: 0.6, blue: 0.85)
+        case .year:
+            return Color(red: 0.9, green: 0.6, blue: 0.7)
+        }
+    }
+    
+    private var formattedDate: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE, MMM d"
+        return formatter.string(from: conversation.createdAt)
+    }
+    
+    private var formattedTime: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        return formatter.string(from: conversation.createdAt)
+    }
+    
+    private var messageCount: Int {
+        conversation.messages.count
+    }
+    
+    private var lastUserMessage: String? {
+        conversation.messages.last(where: { $0.role == .user })?.content
+    }
+    
+    private var statusText: String {
+        if conversation.isClosed {
+            return "Completed"
+        } else {
+            return "In progress"
+        }
+    }
+    
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 12) {
+                // Header row
+                HStack(spacing: 10) {
+                    // Timeframe icon
+                    ZStack {
+                        Circle()
+                            .fill(accentColor.opacity(0.15))
+                            .frame(width: 36, height: 36)
+                        
+                        Image(systemName: conversation.timeframe.icon)
+                            .font(.system(size: 14))
+                            .foregroundColor(accentColor)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(conversation.timeframe.displayTitle) Reading")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(.white)
+                        
+                        Text("\(formattedDate) · \(formattedTime)")
+                            .font(.system(size: 12))
+                            .foregroundColor(Color.white.opacity(0.4))
+                    }
+                    
+                    Spacer()
+                    
+                    // Status badge
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(conversation.isClosed ? Color.white.opacity(0.3) : accentColor)
+                            .frame(width: 6, height: 6)
+                        
+                        Text(statusText)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(conversation.isClosed ? Color.white.opacity(0.4) : accentColor)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule()
+                            .fill(conversation.isClosed ? Color.white.opacity(0.06) : accentColor.opacity(0.15))
+                    )
+                }
+                
+                // Preview of conversation or summary
+                if let summary = conversation.summary, !summary.isEmpty {
+                    Text(summary)
+                        .font(.system(size: 13))
+                        .foregroundColor(Color.white.opacity(0.6))
+                        .lineLimit(2)
+                        .lineSpacing(3)
+                } else if let lastMessage = lastUserMessage {
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("You:")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(Color.white.opacity(0.5))
+                        
+                        Text(lastMessage)
+                            .font(.system(size: 13))
+                            .foregroundColor(Color.white.opacity(0.6))
+                            .lineLimit(2)
+                    }
+                }
+                
+                // Footer
+                HStack {
+                    // Message count
+                    HStack(spacing: 4) {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .font(.system(size: 10))
+                        Text("\(messageCount) messages")
+                            .font(.system(size: 11))
+                    }
+                    .foregroundColor(Color.white.opacity(0.35))
+                    
+                    Spacer()
+                    
+                    // Continue/View action
+                    HStack(spacing: 4) {
+                        Text(conversation.isClosed ? "View" : "Continue")
+                            .font(.system(size: 12, weight: .medium))
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .medium))
+                    }
+                    .foregroundColor(accentColor)
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.white.opacity(0.04))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        accentColor.opacity(0.2),
+                                        Color.white.opacity(0.06)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    )
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 }
 

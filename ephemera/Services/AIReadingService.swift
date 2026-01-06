@@ -1032,11 +1032,142 @@ class AIReadingService: ObservableObject {
     }
 }
 
+// MARK: - Reading Conversation
+
+extension AIReadingService {
+    
+    /// Continues a conversation about a reading
+    /// Returns the assistant's response
+    func continueReadingConversation(
+        conversation: ReadingConversation,
+        userMessage: String,
+        chart: BirthChart,
+        profile: UserProfile,
+        contexts: [UserContext]
+    ) async throws -> String {
+        let prompt = buildConversationPrompt(
+            conversation: conversation,
+            userMessage: userMessage,
+            chart: chart,
+            profile: profile,
+            contexts: contexts
+        )
+        
+        let response = try await model.generateContent(prompt)
+        
+        guard let text = response.text else {
+            throw AIReadingError.noResponse
+        }
+        
+        return text
+    }
+    
+    /// Generates a summary of a conversation for future context
+    func summarizeConversation(
+        conversation: ReadingConversation,
+        chart: BirthChart,
+        profile: UserProfile
+    ) async throws -> String {
+        let prompt = buildSummaryPrompt(conversation: conversation, chart: chart, profile: profile)
+        
+        let response = try await model.generateContent(prompt)
+        
+        guard let text = response.text else {
+            throw AIReadingError.noResponse
+        }
+        
+        return text
+    }
+    
+    private func buildConversationPrompt(
+        conversation: ReadingConversation,
+        userMessage: String,
+        chart: BirthChart,
+        profile: UserProfile,
+        contexts: [UserContext]
+    ) -> String {
+        let chartSummary = buildChartSummary(chart: chart)
+        let contextSummary = contexts.recentEntries(5).formattedForPrompt()
+        let transits = getTransitsForTimeframe(timeframe: conversation.timeframe, chart: chart)
+        let transitSummary = formatTransitsForTimeframe(transits: transits, timeframe: conversation.timeframe)
+        let conversationHistory = conversation.formattedForPrompt()
+        let currentDate = formatCurrentDate()
+        
+        return """
+        You are a wise, compassionate evolutionary astrologer continuing a conversation about a \(conversation.timeframe.rawValue)ly reading you gave.
+        
+        ## Your Role
+        You're having a dialogue with \(profile.name) about their reading. They want to explore it further, ask questions, or connect it to their life. You're warm, insightful, and specific to their chart.
+        
+        ## Guidelines
+        - Keep responses conversational and concise (50-80 words typically, up to 120 if needed)
+        - Reference specific parts of the reading when relevant
+        - Connect their questions back to their chart and current transits
+        - If they go off-topic, gently redirect: "That's interesting—how does it connect to what's coming up for you this \(conversation.timeframe.rawValue)?"
+        - You're having a dialogue, not delivering another reading
+        - End with a question or reflection to keep the conversation going (unless they seem done)
+        - Never discuss other users or claim to access data beyond what's provided
+        - Don't start with "Great question!" or similar filler
+        - Write in second person ("You...")
+        
+        ## Today's Date
+        \(currentDate)
+        
+        ## The Reading You Gave (\(conversation.timeframe.displayTitle))
+        \(conversation.readingContent)
+        
+        ## Key Transits for This Period
+        \(transitSummary)
+        
+        ## Their Birth Chart
+        \(chartSummary)
+        
+        ## What They've Shared About Their Life
+        \(contextSummary)
+        
+        ## Conversation So Far
+        \(conversationHistory)
+        
+        ## Their Latest Message
+        User: \(userMessage)
+        
+        Respond as the astrologer. Be warm, specific, and insightful. Keep it conversational.
+        """
+    }
+    
+    private func buildSummaryPrompt(
+        conversation: ReadingConversation,
+        chart: BirthChart,
+        profile: UserProfile
+    ) -> String {
+        let conversationHistory = conversation.formattedForPrompt()
+        
+        return """
+        You are summarizing a conversation between an astrologer and \(profile.name) about their \(conversation.timeframe.rawValue)ly reading.
+        
+        ## The Conversation
+        \(conversationHistory)
+        
+        ## Your Task
+        Write a brief summary (2-3 sentences, max 60 words) that captures:
+        1. What they explored or asked about
+        2. Any key insights or realizations that emerged
+        3. Relevant chart elements that were discussed
+        
+        This summary will be used as context for future readings, so focus on what's meaningful for their ongoing journey.
+        
+        Write the summary in third person ("They explored...", "The conversation revealed...").
+        Do not include any preamble—just write the summary directly.
+        """
+    }
+}
+
 // MARK: - Errors
 
 enum AIReadingError: LocalizedError {
     case noResponse
     case invalidChart
+    case rateLimited
     
     var errorDescription: String? {
         switch self {
@@ -1044,6 +1175,8 @@ enum AIReadingError: LocalizedError {
             return "Unable to generate reading. Please try again."
         case .invalidChart:
             return "Chart data is incomplete."
+        case .rateLimited:
+            return "You've reached your daily message limit. Come back tomorrow!"
         }
     }
 }

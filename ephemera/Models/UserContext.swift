@@ -28,6 +28,7 @@ enum ContextPromptType: String, Codable, CaseIterable {
     case reflection = "reflection"           // General life reflection
     case journal = "journal"                 // Free-form journal entry
     case freeform = "freeform"               // User-initiated sharing (legacy)
+    case readingConversation = "reading_conversation"  // Summary of a chat about a reading
     
     var displayName: String {
         switch self {
@@ -39,6 +40,7 @@ enum ContextPromptType: String, Codable, CaseIterable {
         case .reflection: return "Reflection"
         case .journal: return "Journal"
         case .freeform: return "Note"
+        case .readingConversation: return "Reading chat"
         }
     }
     
@@ -52,6 +54,7 @@ enum ContextPromptType: String, Codable, CaseIterable {
         case .reflection: return "thought.bubble"
         case .journal: return "book"
         case .freeform: return "note.text"
+        case .readingConversation: return "bubble.left.and.bubble.right"
         }
     }
 }

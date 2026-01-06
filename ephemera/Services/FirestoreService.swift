@@ -304,7 +304,7 @@ class FirestoreService {
         print("✅ All user contexts deleted from Firestore for userId: \(userId)")
     }
     
-    /// Deletes all user data from Firestore (profile, charts, contexts) and the Firebase Auth account
+    /// Deletes all user data from Firestore (profile, charts, contexts, conversations) and the Firebase Auth account
     func deleteUserAccount() async throws {
         guard let user = Auth.auth().currentUser else {
             throw FirestoreError.notAuthenticated
@@ -315,6 +315,7 @@ class FirestoreService {
         // Delete all subcollections first
         try await deleteAllBirthCharts()
         try await deleteAllUserContexts()
+        try await deleteAllConversations()
         
         // Delete the user document
         try await db.collection("users").document(userId).delete()
@@ -353,6 +354,119 @@ class FirestoreService {
             relatedReadingId: relatedReadingId,
             tags: tags
         )
+    }
+    
+    // MARK: - Reading Conversations
+    
+    /// Saves a reading conversation to Firestore
+    func saveConversation(_ conversation: ReadingConversation) async throws {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            throw FirestoreError.notAuthenticated
+        }
+        
+        // Encode messages to JSON
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let messagesJSON = try String(data: encoder.encode(conversation.messages), encoding: .utf8) ?? "[]"
+        
+        let data: [String: Any] = [
+            "id": conversation.id.uuidString,
+            "userId": conversation.userId.uuidString,
+            "timeframe": conversation.timeframe.rawValue,
+            "readingContent": conversation.readingContent,
+            "readingDate": conversation.readingDate,
+            "messagesJSON": messagesJSON,
+            "createdAt": Timestamp(date: conversation.createdAt),
+            "updatedAt": Timestamp(date: conversation.updatedAt),
+            "summary": conversation.summary as Any,
+            "isClosed": conversation.isClosed
+        ]
+        
+        try await db.collection("users").document(userId).collection("conversations").document(conversation.id.uuidString).setData(data)
+        print("✅ Conversation saved to Firestore for userId: \(userId)")
+    }
+    
+    /// Fetches all conversations for the current user
+    func fetchAllConversations() async throws -> [ReadingConversation] {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            throw FirestoreError.notAuthenticated
+        }
+        
+        let snapshot = try await db.collection("users").document(userId).collection("conversations")
+            .order(by: "createdAt", descending: true)
+            .getDocuments()
+        
+        return snapshot.documents.compactMap { parseConversation(from: $0.data()) }
+    }
+    
+    /// Fetches recent conversation summaries for context
+    func fetchRecentConversationSummaries(limit: Int = 5) async throws -> [String] {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            throw FirestoreError.notAuthenticated
+        }
+        
+        let snapshot = try await db.collection("users").document(userId).collection("conversations")
+            .whereField("isClosed", isEqualTo: true)
+            .order(by: "createdAt", descending: true)
+            .limit(to: limit)
+            .getDocuments()
+        
+        return snapshot.documents.compactMap { doc -> String? in
+            let data = doc.data()
+            return data["summary"] as? String
+        }
+    }
+    
+    private func parseConversation(from data: [String: Any]) -> ReadingConversation? {
+        guard let idString = data["id"] as? String,
+              let id = UUID(uuidString: idString),
+              let userIdString = data["userId"] as? String,
+              let userId = UUID(uuidString: userIdString),
+              let timeframeString = data["timeframe"] as? String,
+              let timeframe = ReadingTimeframe(rawValue: timeframeString),
+              let readingContent = data["readingContent"] as? String,
+              let readingDate = data["readingDate"] as? String,
+              let messagesJSON = data["messagesJSON"] as? String,
+              let createdAtTimestamp = data["createdAt"] as? Timestamp else {
+            return nil
+        }
+        
+        // Parse messages from JSON
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let messages: [ChatMessage] = (try? decoder.decode([ChatMessage].self, from: Data(messagesJSON.utf8))) ?? []
+        
+        let updatedAtTimestamp = data["updatedAt"] as? Timestamp ?? createdAtTimestamp
+        let summary = data["summary"] as? String
+        let isClosed = data["isClosed"] as? Bool ?? false
+        
+        return ReadingConversation(
+            id: id,
+            userId: userId,
+            timeframe: timeframe,
+            readingContent: readingContent,
+            readingDate: readingDate,
+            messages: messages,
+            createdAt: createdAtTimestamp.dateValue(),
+            updatedAt: updatedAtTimestamp.dateValue(),
+            summary: summary,
+            isClosed: isClosed
+        )
+    }
+    
+    /// Deletes all conversations for the current user
+    func deleteAllConversations() async throws {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            throw FirestoreError.notAuthenticated
+        }
+        
+        let snapshot = try await db.collection("users").document(userId).collection("conversations").getDocuments()
+        
+        for document in snapshot.documents {
+            try await document.reference.delete()
+        }
+        
+        print("✅ All conversations deleted from Firestore for userId: \(userId)")
     }
     
     // MARK: - Helpers
