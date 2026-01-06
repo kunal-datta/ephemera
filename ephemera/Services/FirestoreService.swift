@@ -399,6 +399,28 @@ class FirestoreService {
         return snapshot.documents.compactMap { parseConversation(from: $0.data()) }
     }
     
+    /// Fetches an existing open conversation for a specific timeframe and date
+    /// Returns the most recent open (not closed) conversation matching the criteria
+    func fetchOpenConversation(timeframe: ReadingTimeframe, date: String) async throws -> ReadingConversation? {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            throw FirestoreError.notAuthenticated
+        }
+        
+        let snapshot = try await db.collection("users").document(userId).collection("conversations")
+            .whereField("timeframe", isEqualTo: timeframe.rawValue)
+            .whereField("readingDate", isEqualTo: date)
+            .whereField("isClosed", isEqualTo: false)
+            .order(by: "createdAt", descending: true)
+            .limit(to: 1)
+            .getDocuments()
+        
+        guard let document = snapshot.documents.first else {
+            return nil
+        }
+        
+        return parseConversation(from: document.data())
+    }
+    
     /// Fetches recent conversation summaries for context
     func fetchRecentConversationSummaries(limit: Int = 5) async throws -> [String] {
         guard let userId = Auth.auth().currentUser?.uid else {

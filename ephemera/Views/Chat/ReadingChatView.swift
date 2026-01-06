@@ -54,7 +54,7 @@ struct ReadingChatView: View {
         VStack(spacing: 0) {
             // Header - keep it flat, no nested HStack/VStack
             HStack {
-                Button(action: { dismiss() }) {
+                Button(action: { handleDismiss() }) {
                     Label("Done", systemImage: "chevron.left")
                         .font(.system(size: 15, weight: .medium))
                         .foregroundColor(accentColor)
@@ -368,6 +368,28 @@ struct ReadingChatView: View {
         }
     }
     
+    /// Handles dismiss action - saves conversation if there are messages
+    private func handleDismiss() {
+        // If read-only or no messages, just dismiss
+        guard !isReadOnly, let currentConversation = conversation, !currentConversation.messages.isEmpty else {
+            dismiss()
+            return
+        }
+        
+        // Save the conversation (but don't close it) so it can be continued later
+        Task {
+            do {
+                try await FirestoreService.shared.saveConversation(currentConversation)
+                print("✅ Conversation saved for continuation")
+            } catch {
+                print("❌ Failed to save conversation: \(error)")
+            }
+            await MainActor.run {
+                dismiss()
+            }
+        }
+    }
+    
     private func sendMessage() {
         let trimmedInput = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedInput.isEmpty, var currentConversation = conversation else { return }
@@ -401,6 +423,15 @@ struct ReadingChatView: View {
                         conv = conv.adding(message: assistantMessage)
                         conversation = conv
                         conversationManager.activeConversation = conv
+                        
+                        // Auto-save conversation after each exchange
+                        Task {
+                            do {
+                                try await FirestoreService.shared.saveConversation(conv)
+                            } catch {
+                                print("❌ Failed to auto-save conversation: \(error)")
+                            }
+                        }
                     }
                     isLoading = false
                     scrollToBottom()

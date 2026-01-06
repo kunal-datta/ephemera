@@ -18,6 +18,7 @@ struct ChatPresentationData: Identifiable {
     let id = UUID()
     let timeframe: ReadingTimeframe
     let reading: String
+    var existingConversation: ReadingConversation? = nil
 }
 
 struct CompactTimeframeReadingView: View {
@@ -30,6 +31,7 @@ struct CompactTimeframeReadingView: View {
     @State private var loadingStates: [ReadingTimeframe: Bool] = [:]
     @State private var errorStates: [ReadingTimeframe: String?] = [:]
     @State private var chatPresentation: ChatPresentationData? = nil
+    @State private var isLoadingConversation: Bool = false
     
     private let timeframes = ReadingTimeframe.allCases
     
@@ -51,15 +53,12 @@ struct CompactTimeframeReadingView: View {
             CompactReadingCard(
                 timeframe: currentTimeframe,
                 reading: readings[currentTimeframe],
-                isLoading: loadingStates[currentTimeframe] ?? false,
+                isLoading: loadingStates[currentTimeframe] ?? false || isLoadingConversation,
                 error: errorStates[currentTimeframe] ?? nil,
                 onRetry: { loadReading(for: currentTimeframe, forceRefresh: true) },
                 onChat: {
                     if let reading = currentReading {
-                        chatPresentation = ChatPresentationData(
-                            timeframe: currentTimeframe,
-                            reading: reading
-                        )
+                        openChatForTimeframe(currentTimeframe, reading: reading)
                     }
                 }
             )
@@ -96,10 +95,50 @@ struct CompactTimeframeReadingView: View {
                     readingContent: data.reading,
                     chart: chart,
                     profile: profile,
-                    contexts: contexts
+                    contexts: contexts,
+                    existingConversation: data.existingConversation
                 )
                 .navigationBarHidden(true)
                 .toolbar(.hidden, for: .navigationBar)
+            }
+        }
+    }
+    
+    // MARK: - Chat Opening Logic
+    
+    /// Opens chat for a timeframe, checking for existing open conversations first
+    private func openChatForTimeframe(_ timeframe: ReadingTimeframe, reading: String) {
+        isLoadingConversation = true
+        
+        Task {
+            do {
+                // Get today's date in the format used by conversations
+                let todayString = DailyMessageUsage.today
+                
+                // Check if there's an existing open conversation for this timeframe today
+                let existingConversation = try await FirestoreService.shared.fetchOpenConversation(
+                    timeframe: timeframe,
+                    date: todayString
+                )
+                
+                await MainActor.run {
+                    isLoadingConversation = false
+                    chatPresentation = ChatPresentationData(
+                        timeframe: timeframe,
+                        reading: reading,
+                        existingConversation: existingConversation
+                    )
+                }
+            } catch {
+                print("❌ Failed to check for existing conversation: \(error)")
+                await MainActor.run {
+                    isLoadingConversation = false
+                    // Open without existing conversation on error
+                    chatPresentation = ChatPresentationData(
+                        timeframe: timeframe,
+                        reading: reading
+                    )
+                }
             }
         }
     }
