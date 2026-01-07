@@ -245,15 +245,6 @@ struct ChartReadingView: View {
         let hasRisingSection = reading.sections.contains { $0.relatestoRising }
         
         return VStack(spacing: 8) {
-            // Section title above chart
-            if let section = currentSection {
-                Text(cleanSectionTitle(section.title))
-                    .font(.custom("Georgia", size: 16))
-                    .foregroundColor(Color(red: 0.9, green: 0.87, blue: 0.82))
-                    .lineLimit(1)
-                    .padding(.horizontal, 20)
-            }
-            
             // Interactive chart wheel
             GeometryReader { geometry in
                 let size = min(geometry.size.width - 40, 280)
