@@ -65,18 +65,6 @@ struct ChartReadingView: View {
                 loadingView
             }
             
-            // Floating chat button
-            if reading != nil {
-                VStack {
-                    Spacer()
-                    HStack {
-                        Spacer()
-                        floatingChatButton
-                            .padding(.trailing, 20)
-                            .padding(.bottom, 24)
-                    }
-                }
-            }
         }
         .navigationBarBackButtonHidden(true)
         .toolbar {
@@ -129,28 +117,23 @@ struct ChartReadingView: View {
         }
     }
     
-    // MARK: - Floating Chat Button
+    // MARK: - Ask Button (inline, minimalist style)
     
-    private var floatingChatButton: some View {
+    private var askButton: some View {
         Button(action: { showingChat = true }) {
-            HStack(spacing: 8) {
-                Image(systemName: "bubble.left.and.bubble.right.fill")
-                    .font(.system(size: 16))
-                Text("Ask")
-                    .font(.system(size: 15, weight: .semibold))
+            HStack(spacing: 6) {
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.system(size: 11))
+                    .foregroundColor(accentColor)
+                
+                Text("Ask about this reading")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Color.white.opacity(0.5))
             }
-            .foregroundColor(.white)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 14)
-            .background(
-                Capsule()
-                    .fill(accentColor)
-                    .shadow(color: accentColor.opacity(0.4), radius: 12, x: 0, y: 6)
-            )
         }
-        .buttonStyle(ScaleButtonStyle())
+        .buttonStyle(PlainButtonStyle())
         .disabled(!conversationManager.canSendMessage)
-        .opacity(conversationManager.canSendMessage ? 1 : 0.6)
+        .opacity(conversationManager.canSendMessage ? 1 : 0.5)
     }
     
     // MARK: - Loading View
@@ -206,10 +189,14 @@ struct ChartReadingView: View {
                 interactiveChartSection(reading: reading)
                     .padding(.top, 8)
                 
+                // Ask button - minimalist inline style, between chart and page indicator
+                askButton
+                    .padding(.top, 8)
+                
                 // Custom page indicator below chart
                 if !reading.sections.isEmpty {
                     pageIndicator(total: reading.sections.count)
-                        .padding(.top, 12)
+                        .padding(.top, 8)
                         .padding(.bottom, 16)
                 }
                 
