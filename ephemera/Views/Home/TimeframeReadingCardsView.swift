@@ -113,7 +113,7 @@ struct CompactTimeframeReadingView: View {
         Task {
             do {
                 // Get today's date in the format used by conversations
-                let todayString = DailyMessageUsage.today
+                let todayString = DateUtility.today
                 
                 // Check if there's an existing open conversation for this timeframe today
                 let existingConversation = try await FirestoreService.shared.fetchOpenConversation(

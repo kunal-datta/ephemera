@@ -125,13 +125,63 @@ struct ReadingConversation: Identifiable, Codable {
     }
 }
 
-// MARK: - Rate Limiting
+// MARK: - Credits System
 
-/// Tracks daily message usage for rate limiting
-struct DailyMessageUsage: Codable {
-    let date: String  // yyyy-MM-dd
-    var messageCount: Int
+/// Credit packages available for purchase
+enum CreditPackage: CaseIterable, Identifiable {
+    case small   // 10 credits
+    case medium  // 30 credits
+    case large   // 100 credits
     
+    var id: String { title }
+    
+    var credits: Int {
+        switch self {
+        case .small: return 10
+        case .medium: return 30
+        case .large: return 100
+        }
+    }
+    
+    var title: String {
+        switch self {
+        case .small: return "10 Messages"
+        case .medium: return "30 Messages"
+        case .large: return "100 Messages"
+        }
+    }
+    
+    var price: String {
+        switch self {
+        case .small: return "$2.99"
+        case .medium: return "$6.99"
+        case .large: return "$14.99"
+        }
+    }
+    
+    var description: String {
+        switch self {
+        case .small: return "Perfect for a quick exploration"
+        case .medium: return "Great for deeper conversations"
+        case .large: return "Best value for regular users"
+        }
+    }
+}
+
+/// Tracks user's credit balance
+struct CreditBalance: Codable {
+    var credits: Int
+    var totalPurchased: Int  // Track lifetime purchases for analytics
+    var lastUpdated: Date
+    
+    static var initial: CreditBalance {
+        CreditBalance(credits: 10, totalPurchased: 0, lastUpdated: Date())
+    }
+}
+
+// MARK: - Date Formatter (for conversation dates)
+
+enum DateUtility {
     static var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
@@ -141,60 +191,75 @@ struct DailyMessageUsage: Codable {
     static var today: String {
         dateFormatter.string(from: Date())
     }
-    
-    var isToday: Bool {
-        date == Self.today
-    }
 }
 
 // MARK: - Conversation Manager
 
-/// Manages conversation state and rate limiting
+/// Manages conversation state and credits
 @MainActor
 class ConversationManager: ObservableObject {
     static let shared = ConversationManager()
     
-    /// Maximum messages per day (free tier)
-    static let dailyMessageLimit = 5
+    /// Starting credits for new users
+    static let initialCredits = 10
     
-    @Published var dailyUsage: DailyMessageUsage
+    @Published var creditBalance: CreditBalance
     @Published var activeConversation: ReadingConversation?
     
-    private let usageKey = "dailyMessageUsage"
+    private let creditsKey = "userCreditBalance"
     
     private init() {
-        // Load or create daily usage
-        if let data = UserDefaults.standard.data(forKey: usageKey),
-           let usage = try? JSONDecoder().decode(DailyMessageUsage.self, from: data),
-           usage.isToday {
-            self.dailyUsage = usage
+        // Load or create credit balance
+        if let data = UserDefaults.standard.data(forKey: creditsKey),
+           let balance = try? JSONDecoder().decode(CreditBalance.self, from: data) {
+            self.creditBalance = balance
         } else {
-            self.dailyUsage = DailyMessageUsage(date: DailyMessageUsage.today, messageCount: 0)
+            self.creditBalance = CreditBalance.initial
+            saveBalance()
         }
     }
     
-    /// Remaining messages for today
+    /// Remaining messages (credits)
     var remainingMessages: Int {
-        max(0, Self.dailyMessageLimit - dailyUsage.messageCount)
+        creditBalance.credits
     }
     
-    /// Whether the user can send more messages today
+    /// Whether the user can send more messages
     var canSendMessage: Bool {
         remainingMessages > 0
     }
     
-    /// Records a message sent and persists usage
+    /// Whether credits are running low (show gentle reminder)
+    var isLowOnCredits: Bool {
+        remainingMessages > 0 && remainingMessages <= 3
+    }
+    
+    /// Records a message sent and deducts a credit
     func recordMessageSent() {
-        // Reset if it's a new day
-        if !dailyUsage.isToday {
-            dailyUsage = DailyMessageUsage(date: DailyMessageUsage.today, messageCount: 1)
-        } else {
-            dailyUsage = DailyMessageUsage(date: dailyUsage.date, messageCount: dailyUsage.messageCount + 1)
-        }
-        
-        // Persist
-        if let data = try? JSONEncoder().encode(dailyUsage) {
-            UserDefaults.standard.set(data, forKey: usageKey)
+        creditBalance.credits = max(0, creditBalance.credits - 1)
+        creditBalance.lastUpdated = Date()
+        saveBalance()
+    }
+    
+    /// Adds credits (from purchase or promo)
+    func addCredits(_ amount: Int) {
+        creditBalance.credits += amount
+        creditBalance.totalPurchased += amount
+        creditBalance.lastUpdated = Date()
+        saveBalance()
+    }
+    
+    /// Purchases a credit package (mocked for now)
+    func purchasePackage(_ package: CreditPackage) async -> Bool {
+        // TODO: Integrate real payment flow (StoreKit, Stripe, etc.)
+        // For now, just add the credits immediately
+        addCredits(package.credits)
+        return true
+    }
+    
+    private func saveBalance() {
+        if let data = try? JSONEncoder().encode(creditBalance) {
+            UserDefaults.standard.set(data, forKey: creditsKey)
         }
     }
     
@@ -208,7 +273,7 @@ class ConversationManager: ObservableObject {
             userId: userId,
             timeframe: timeframe,
             readingContent: readingContent,
-            readingDate: DailyMessageUsage.today
+            readingDate: DateUtility.today
         )
         activeConversation = conversation
         return conversation

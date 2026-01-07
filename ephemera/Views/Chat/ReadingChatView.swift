@@ -27,6 +27,7 @@ struct ReadingChatView: View {
     @State private var isLoading: Bool = false
     @State private var showingEndConfirmation: Bool = false
     @State private var isSummarizing: Bool = false
+    @State private var showingCreditsSheet: Bool = false
     @FocusState private var isInputFocused: Bool
     
     // Scroll state
@@ -68,9 +69,30 @@ struct ReadingChatView: View {
                 
                 Spacer()
                 
-                Text("\(conversationManager.remainingMessages) left")
-                    .font(.system(size: 11))
-                    .foregroundColor(.white.opacity(0.4))
+                // Credits indicator with Get More button
+                Button(action: { showingCreditsSheet = true }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 10))
+                        Text("\(conversationManager.remainingMessages)")
+                            .font(.system(size: 12, weight: .semibold))
+                        if !conversationManager.canSendMessage {
+                            Text("Get more")
+                                .font(.system(size: 10))
+                        }
+                    }
+                    .foregroundColor(conversationManager.canSendMessage ? 
+                        (conversationManager.isLowOnCredits ? .orange : .white.opacity(0.6)) : 
+                        accentColor)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule()
+                            .fill(conversationManager.canSendMessage ? 
+                                Color.white.opacity(0.08) : 
+                                accentColor.opacity(0.2))
+                    )
+                }
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 16)
@@ -152,29 +174,57 @@ struct ReadingChatView: View {
             .frame(maxWidth: .infinity)
             
             // Input area
-            HStack(spacing: 12) {
-                TextField("Ask about your reading...", text: $inputText, axis: .vertical)
-                    .font(.system(size: 15))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(Color.white.opacity(0.08))
-                    )
-                    .lineLimit(1...4)
-                
-                Button(action: sendMessage) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 32))
-                        .foregroundColor(canSend ? accentColor : accentColor.opacity(0.3))
+            if !isReadOnly && !conversationManager.canSendMessage {
+                // Out of credits prompt
+                VStack(spacing: 12) {
+                    Text("You're out of message credits")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.6))
+                    
+                    Button(action: { showingCreditsSheet = true }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 14))
+                            Text("Get More Credits")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 12)
+                        .background(
+                            Capsule()
+                                .fill(accentColor)
+                        )
+                    }
                 }
-                .disabled(!canSend)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(Color.black.opacity(0.4))
+            } else {
+                HStack(spacing: 12) {
+                    TextField("Ask about your reading...", text: $inputText, axis: .vertical)
+                        .font(.system(size: 15))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(Color.white.opacity(0.08))
+                        )
+                        .lineLimit(1...4)
+                    
+                    Button(action: sendMessage) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 32))
+                            .foregroundColor(canSend ? accentColor : accentColor.opacity(0.3))
+                    }
+                    .disabled(!canSend)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color.black.opacity(0.4))
             }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(Color.black.opacity(0.4))
         }
         .frame(maxWidth: .infinity)
         .background(Color(red: 0.04, green: 0.04, blue: 0.09))
@@ -184,6 +234,9 @@ struct ReadingChatView: View {
             Button("End & Save", role: .destructive) { endConversation() }
         } message: {
             Text("This will save a summary of your conversation to inform future readings.")
+        }
+        .sheet(isPresented: $showingCreditsSheet) {
+            CreditsSheetView(accentColor: accentColor)
         }
     }
     
@@ -219,7 +272,7 @@ struct ReadingChatView: View {
                         .font(.system(size: 11))
                         .foregroundColor(.white.opacity(0.4))
                 } else {
-                    Text("\(conversationManager.remainingMessages) messages remaining today")
+                    Text("\(conversationManager.remainingMessages) credits")
                         .font(.system(size: 11))
                         .foregroundColor(.white.opacity(0.4))
                 }
@@ -586,6 +639,181 @@ struct TypingIndicator: View {
                 animationPhase = (animationPhase + 1) % 3
             }
         }
+    }
+}
+
+// MARK: - Credits Sheet
+
+struct CreditsSheetView: View {
+    let accentColor: Color
+    
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var conversationManager = ConversationManager.shared
+    @State private var isPurchasing: Bool = false
+    @State private var purchasedPackage: CreditPackage?
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                // Background
+                Color(red: 0.04, green: 0.04, blue: 0.09)
+                    .ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Current balance
+                        VStack(spacing: 8) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(accentColor)
+                                Text("\(conversationManager.remainingMessages)")
+                                    .font(.system(size: 48, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white)
+                            }
+                            
+                            Text("credits remaining")
+                                .font(.system(size: 14))
+                                .foregroundColor(.white.opacity(0.5))
+                        }
+                        .padding(.top, 20)
+                        
+                        // Package options
+                        VStack(spacing: 12) {
+                            ForEach(CreditPackage.allCases) { package in
+                                CreditPackageCard(
+                                    package: package,
+                                    accentColor: accentColor,
+                                    isPurchasing: isPurchasing,
+                                    onPurchase: { purchasePackage(package) }
+                                )
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        
+                        // Success message
+                        if let purchased = purchasedPackage {
+                            HStack(spacing: 8) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                Text("\(purchased.credits) credits added!")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.white)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(
+                                Capsule()
+                                    .fill(Color.green.opacity(0.2))
+                            )
+                            .transition(.scale.combined(with: .opacity))
+                        }
+                        
+                        // Info text
+                        Text("Each message you send uses 1 credit.\nCredits never expire.")
+                            .font(.system(size: 12))
+                            .foregroundColor(.white.opacity(0.4))
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 8)
+                        
+                        Spacer(minLength: 40)
+                    }
+                }
+            }
+            .navigationTitle("Get Credits")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .foregroundColor(accentColor)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+    
+    private func purchasePackage(_ package: CreditPackage) {
+        isPurchasing = true
+        purchasedPackage = nil
+        
+        Task {
+            // Simulate a brief delay for "processing"
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            
+            let success = await conversationManager.purchasePackage(package)
+            
+            await MainActor.run {
+                isPurchasing = false
+                if success {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                        purchasedPackage = package
+                    }
+                    
+                    // Clear success message after 2 seconds
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        withAnimation {
+                            purchasedPackage = nil
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Credit Package Card
+
+struct CreditPackageCard: View {
+    let package: CreditPackage
+    let accentColor: Color
+    let isPurchasing: Bool
+    let onPurchase: () -> Void
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            // Credits info
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 14))
+                        .foregroundColor(accentColor)
+                    Text(package.title)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+                
+                Text(package.description)
+                    .font(.system(size: 12))
+                    .foregroundColor(.white.opacity(0.5))
+            }
+            
+            Spacer()
+            
+            // Price button
+            Button(action: onPurchase) {
+                Text(package.price)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule()
+                            .fill(accentColor)
+                    )
+            }
+            .disabled(isPurchasing)
+            .opacity(isPurchasing ? 0.5 : 1)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white.opacity(0.05))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(package == .large ? accentColor.opacity(0.3) : Color.white.opacity(0.1), lineWidth: 1)
+                )
+        )
     }
 }
 
