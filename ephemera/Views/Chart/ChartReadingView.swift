@@ -26,6 +26,8 @@ struct ChartReadingView: View {
     @State private var hasAppeared = false
     @State private var currentCardIndex = 0
     @State private var showingChat = false
+    @State private var existingConversation: ReadingConversation?
+    @State private var isLoadingConversation = false
     
     // Filter contexts for this user
     private var userContexts: [UserContext] {
@@ -108,7 +110,8 @@ struct ChartReadingView: View {
                         chart: chart,
                         profile: profile,
                         contexts: userContexts,
-                        accentColor: accentColor
+                        accentColor: accentColor,
+                        existingConversation: existingConversation
                     )
                     .navigationBarHidden(true)
                     .toolbar(.hidden, for: .navigationBar)
@@ -119,12 +122,41 @@ struct ChartReadingView: View {
     
     // MARK: - Ask Button (inline, minimalist style)
     
+    private func openChat() {
+        isLoadingConversation = true
+        
+        Task {
+            do {
+                existingConversation = try await FirestoreService.shared.fetchElementConversation(
+                    elementTitle: "Your Reading"
+                )
+                
+                await MainActor.run {
+                    isLoadingConversation = false
+                    showingChat = true
+                }
+            } catch {
+                print("❌ Failed to fetch reading conversation: \(error)")
+                await MainActor.run {
+                    isLoadingConversation = false
+                    showingChat = true
+                }
+            }
+        }
+    }
+    
     private var askButton: some View {
-        Button(action: { showingChat = true }) {
+        Button(action: { openChat() }) {
             HStack(spacing: 6) {
-                Image(systemName: "bubble.left.and.bubble.right")
-                    .font(.system(size: 11))
-                    .foregroundColor(accentColor)
+                if isLoadingConversation {
+                    ProgressView()
+                        .scaleEffect(0.6)
+                        .tint(accentColor)
+                } else {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.system(size: 11))
+                        .foregroundColor(accentColor)
+                }
                 
                 Text("Ask about this reading")
                     .font(.system(size: 14, weight: .medium))

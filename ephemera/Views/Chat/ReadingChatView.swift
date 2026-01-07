@@ -26,18 +26,12 @@ struct ReadingChatView: View {
     @State private var conversation: ReadingConversation?
     @State private var inputText: String = ""
     @State private var isLoading: Bool = false
-    @State private var showingEndConfirmation: Bool = false
-    @State private var isSummarizing: Bool = false
     @State private var showingMessagesSheet: Bool = false
     @FocusState private var isInputFocused: Bool
     
     // Scroll state
     @State private var scrollProxy: ScrollViewProxy?
     
-    /// Whether this is viewing a closed conversation (read-only mode)
-    private var isReadOnly: Bool {
-        existingConversation?.isClosed == true
-    }
     
     private var accentColor: Color {
         switch timeframe {
@@ -175,7 +169,7 @@ struct ReadingChatView: View {
             .frame(maxWidth: .infinity)
             
             // Input area
-            if !isReadOnly && !conversationManager.canSendMessage {
+            if !conversationManager.canSendMessage {
                 // Out of messages prompt
                 VStack(spacing: 12) {
                     Text("You're out of messages")
@@ -230,12 +224,6 @@ struct ReadingChatView: View {
         .frame(maxWidth: .infinity)
         .background(Color(red: 0.04, green: 0.04, blue: 0.09))
         .onAppear { startConversation() }
-        .alert("End Conversation?", isPresented: $showingEndConfirmation) {
-            Button("Keep Chatting", role: .cancel) { }
-            Button("End & Save", role: .destructive) { endConversation() }
-        } message: {
-            Text("This will save a summary of your conversation to inform future readings.")
-        }
         .sheet(isPresented: $showingMessagesSheet) {
             MessagesSheetView(accentColor: accentColor)
         }
@@ -246,16 +234,12 @@ struct ReadingChatView: View {
     private var chatHeader: some View {
         HStack {
             Button(action: {
-                if isReadOnly || (conversation?.messages.isEmpty ?? true) {
-                    dismiss()
-                } else {
-                    showingEndConfirmation = true
-                }
+                handleDismiss()
             }) {
                 HStack(spacing: 6) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 14, weight: .medium))
-                    Text(isReadOnly ? "Back" : "Done")
+                    Text("Done")
                         .font(.system(size: 15, weight: .medium))
                 }
                 .foregroundColor(accentColor)
@@ -264,19 +248,13 @@ struct ReadingChatView: View {
             Spacer()
             
             VStack(spacing: 2) {
-                Text(isReadOnly ? "Past Conversation" : "Exploring Your \(timeframe.displayTitle)")
+                Text("Exploring Your \(timeframe.displayTitle)")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(.white.opacity(0.9))
                 
-                if isReadOnly {
-                    Text(formattedConversationDate)
-                        .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.4))
-                } else {
-                    Text("\(conversationManager.remainingMessages) messages")
-                        .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.4))
-                }
+                Text("\(conversationManager.remainingMessages) messages")
+                    .font(.system(size: 11))
+                    .foregroundColor(.white.opacity(0.4))
             }
             
             Spacer()
@@ -287,13 +265,6 @@ struct ReadingChatView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(Color.black.opacity(0.3))
-    }
-    
-    private var formattedConversationDate: String {
-        guard let conv = existingConversation else { return "" }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d, yyyy"
-        return formatter.string(from: conv.createdAt)
     }
     
     // MARK: - Reading Context Card
@@ -345,57 +316,36 @@ struct ReadingChatView: View {
     
     @ViewBuilder
     private var inputArea: some View {
-        if isReadOnly {
-            // Read-only footer for closed conversations
-            VStack(spacing: 0) {
-                Divider()
-                    .background(Color.white.opacity(0.1))
+        VStack(spacing: 0) {
+            Divider()
+                .background(Color.white.opacity(0.1))
+            
+            HStack(spacing: 12) {
+                // Text field
+                TextField("Ask about your reading...", text: $inputText, axis: .vertical)
+                    .font(.system(size: 15))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(Color.white.opacity(0.08))
+                    )
+                    .focused($isInputFocused)
+                    .lineLimit(1...4)
+                    .disabled(!conversationManager.canSendMessage || isLoading)
                 
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 14))
-                        .foregroundColor(Color.white.opacity(0.4))
-                    
-                    Text("This conversation has ended")
-                        .font(.system(size: 13))
-                        .foregroundColor(Color.white.opacity(0.4))
+                // Send button
+                Button(action: sendMessage) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 32))
+                        .foregroundColor(canSend ? accentColor : accentColor.opacity(0.3))
                 }
-                .padding(.vertical, 16)
-                .frame(maxWidth: .infinity)
-                .background(Color.black.opacity(0.4))
+                .disabled(!canSend)
             }
-        } else {
-            VStack(spacing: 0) {
-                Divider()
-                    .background(Color.white.opacity(0.1))
-                
-                HStack(spacing: 12) {
-                    // Text field
-                    TextField("Ask about your reading...", text: $inputText, axis: .vertical)
-                        .font(.system(size: 15))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(Color.white.opacity(0.08))
-                        )
-                        .focused($isInputFocused)
-                        .lineLimit(1...4)
-                        .disabled(!conversationManager.canSendMessage || isLoading)
-                    
-                    // Send button
-                    Button(action: sendMessage) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 32))
-                            .foregroundColor(canSend ? accentColor : accentColor.opacity(0.3))
-                    }
-                    .disabled(!canSend)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Color.black.opacity(0.4))
-            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color.black.opacity(0.4))
         }
     }
     
@@ -410,8 +360,28 @@ struct ReadingChatView: View {
     private func startConversation() {
         if let existing = existingConversation {
             // Continue existing conversation
-            conversation = existing
-            conversationManager.activeConversation = existing
+            // If it was closed (previously summarized), reopen it for continuation
+            if existing.isClosed {
+                // Reopen the conversation - clear old summary since we'll generate a new one on dismiss
+                let reopened = ReadingConversation(
+                    id: existing.id,
+                    userId: existing.userId,
+                    timeframe: existing.timeframe,
+                    readingContent: existing.readingContent,
+                    readingDate: existing.readingDate,
+                    messages: existing.messages,
+                    createdAt: existing.createdAt,
+                    updatedAt: Date(),
+                    elementTitle: existing.elementTitle,
+                    summary: nil,  // Clear old summary
+                    isClosed: false  // Reopen for continuation
+                )
+                conversation = reopened
+                conversationManager.activeConversation = reopened
+            } else {
+                conversation = existing
+                conversationManager.activeConversation = existing
+            }
         } else {
             // Start new conversation with the reading's generation date
             conversation = conversationManager.startConversation(
@@ -423,19 +393,50 @@ struct ReadingChatView: View {
         }
     }
     
-    /// Handles dismiss action - saves conversation if there are messages
+    /// Handles dismiss action - saves conversation and generates summary if meaningful
     private func handleDismiss() {
-        // If read-only or no messages, just dismiss
-        guard !isReadOnly, let currentConversation = conversation, !currentConversation.messages.isEmpty else {
+        // If no messages, just dismiss
+        guard let currentConversation = conversation, !currentConversation.messages.isEmpty else {
             dismiss()
             return
         }
         
-        // Save the conversation (but don't close it) so it can be continued later
+        // If there are at least 2 exchanges (user + assistant), generate a summary for future context
+        let hasSubstantialContent = currentConversation.messages.count >= 2
+        
         Task {
             do {
-                try await FirestoreService.shared.saveConversation(currentConversation)
-                print("✅ Conversation saved for continuation")
+                if hasSubstantialContent && currentConversation.summary == nil {
+                    // Generate summary in the background for future readings
+                    let summary = try await AIReadingService.shared.summarizeConversation(
+                        conversation: currentConversation,
+                        chart: chart,
+                        profile: profile
+                    )
+                    
+                    // Save as UserContext so future readings/chats can access this insight
+                    let contextEntry = UserContext(
+                        id: UUID(),
+                        userId: profile.id,
+                        promptType: .readingConversation,
+                        question: "Conversation about \(timeframe.rawValue)ly reading (\(currentConversation.readingDate))",
+                        response: summary,
+                        createdAt: Date(),
+                        tags: timeframe.rawValue
+                    )
+                    
+                    try await FirestoreService.shared.saveUserContext(contextEntry)
+                    
+                    // Save the conversation with summary
+                    try await FirestoreService.shared.saveConversation(
+                        currentConversation.closed(withSummary: summary)
+                    )
+                    print("✅ Conversation saved with summary")
+                } else {
+                    // Just save the conversation without summary (too short)
+                    try await FirestoreService.shared.saveConversation(currentConversation)
+                    print("✅ Conversation saved (no summary needed)")
+                }
             } catch {
                 print("❌ Failed to save conversation: \(error)")
             }
@@ -503,55 +504,6 @@ struct ReadingChatView: View {
                         conversation = conv
                     }
                     isLoading = false
-                }
-            }
-        }
-    }
-    
-    private func endConversation() {
-        guard let currentConversation = conversation, !currentConversation.messages.isEmpty else {
-            dismiss()
-            return
-        }
-        
-        isSummarizing = true
-        
-        Task {
-            do {
-                // Generate summary
-                let summary = try await AIReadingService.shared.summarizeConversation(
-                    conversation: currentConversation,
-                    chart: chart,
-                    profile: profile
-                )
-                
-                // Save as UserContext
-                let contextEntry = UserContext(
-                    id: UUID(),
-                    userId: profile.id,
-                    promptType: .readingConversation,
-                    question: "Conversation about \(timeframe.rawValue)ly reading (\(currentConversation.readingDate))",
-                    response: summary,
-                    createdAt: Date(),
-                    tags: timeframe.rawValue
-                )
-                
-                try await FirestoreService.shared.saveUserContext(contextEntry)
-                
-                // Also save the full conversation
-                try await FirestoreService.shared.saveConversation(
-                    currentConversation.closed(withSummary: summary)
-                )
-                
-                await MainActor.run {
-                    isSummarizing = false
-                    dismiss()
-                }
-            } catch {
-                print("❌ Failed to save conversation: \(error)")
-                await MainActor.run {
-                    isSummarizing = false
-                    dismiss()
                 }
             }
         }

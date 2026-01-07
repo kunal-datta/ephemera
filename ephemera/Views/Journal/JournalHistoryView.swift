@@ -1511,11 +1511,7 @@ struct ChatHistoryCard: View {
     }
     
     private var statusText: String {
-        if conversation.isClosed {
-            return "Completed"
-        } else {
-            return "In progress"
-        }
+        "\(messageCount) messages"
     }
     
     var body: some View {
@@ -1545,21 +1541,20 @@ struct ChatHistoryCard: View {
                     
                     Spacer()
                     
-                    // Status badge
+                    // Message count badge
                     HStack(spacing: 4) {
-                        Circle()
-                            .fill(conversation.isClosed ? Color.white.opacity(0.3) : accentColor)
-                            .frame(width: 6, height: 6)
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .font(.system(size: 10))
                         
                         Text(statusText)
                             .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(conversation.isClosed ? Color.white.opacity(0.4) : accentColor)
                     }
+                    .foregroundColor(accentColor)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
                         Capsule()
-                            .fill(conversation.isClosed ? Color.white.opacity(0.06) : accentColor.opacity(0.15))
+                            .fill(accentColor.opacity(0.15))
                     )
                 }
                 
@@ -1585,20 +1580,16 @@ struct ChatHistoryCard: View {
                 
                 // Footer
                 HStack {
-                    // Message count
-                    HStack(spacing: 4) {
-                        Image(systemName: "bubble.left.and.bubble.right")
-                            .font(.system(size: 10))
-                        Text("\(messageCount) messages")
-                            .font(.system(size: 11))
-                    }
-                    .foregroundColor(Color.white.opacity(0.35))
+                    // Reading date
+                    Text("Reading: \(conversation.readingDate)")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color.white.opacity(0.35))
                     
                     Spacer()
                     
-                    // Continue/View action
+                    // Continue action
                     HStack(spacing: 4) {
-                        Text(conversation.isClosed ? "View" : "Continue")
+                        Text("Continue")
                             .font(.system(size: 12, weight: .medium))
                         Image(systemName: "chevron.right")
                             .font(.system(size: 10, weight: .medium))

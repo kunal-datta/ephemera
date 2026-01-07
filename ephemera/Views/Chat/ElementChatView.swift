@@ -94,8 +94,27 @@ struct ElementChatView: View {
     private func startConversation() {
         if let existing = existingConversation {
             // Continue existing conversation
-            conversation = existing
-            messages = existing.messages
+            // If it was closed (previously summarized), reopen it for continuation
+            if existing.isClosed {
+                let reopened = ReadingConversation(
+                    id: existing.id,
+                    userId: existing.userId,
+                    timeframe: existing.timeframe,
+                    readingContent: existing.readingContent,
+                    readingDate: existing.readingDate,
+                    messages: existing.messages,
+                    createdAt: existing.createdAt,
+                    updatedAt: Date(),
+                    elementTitle: existing.elementTitle,
+                    summary: nil,  // Clear old summary
+                    isClosed: false  // Reopen for continuation
+                )
+                conversation = reopened
+                messages = reopened.messages
+            } else {
+                conversation = existing
+                messages = existing.messages
+            }
         } else {
             // Start new conversation
             let newConversation = ReadingConversation(
@@ -111,30 +130,62 @@ struct ElementChatView: View {
     
     private func handleDismiss() {
         // Save conversation if there are messages
-        guard let currentConversation = conversation, !messages.isEmpty else {
+        guard let conv = conversation, !messages.isEmpty else {
             dismiss()
             return
         }
         
-        // Update conversation with current messages
+        // If there are at least 2 exchanges (user + assistant), generate a summary for future context
+        let hasSubstantialContent = messages.count >= 2
+        
+        // Build conversation with current messages
         let updatedConversation = ReadingConversation(
-            id: currentConversation.id,
-            userId: currentConversation.userId,
-            timeframe: currentConversation.timeframe,
-            readingContent: currentConversation.readingContent,
-            readingDate: currentConversation.readingDate,
+            id: conv.id,
+            userId: conv.userId,
+            timeframe: conv.timeframe,
+            readingContent: conv.readingContent,
+            readingDate: conv.readingDate,
             messages: messages,
-            createdAt: currentConversation.createdAt,
+            createdAt: conv.createdAt,
             updatedAt: Date(),
-            elementTitle: currentConversation.elementTitle,
-            summary: currentConversation.summary,
-            isClosed: currentConversation.isClosed
+            elementTitle: conv.elementTitle,
+            summary: conv.summary,
+            isClosed: conv.isClosed
         )
         
         Task {
             do {
-                try await FirestoreService.shared.saveConversation(updatedConversation)
-                print("✅ Element conversation saved")
+                if hasSubstantialContent && conv.summary == nil {
+                    // Generate summary in the background for future readings
+                    let summary = try await AIReadingService.shared.summarizeConversation(
+                        conversation: updatedConversation,
+                        chart: chart,
+                        profile: profile
+                    )
+                    
+                    // Save as UserContext so future readings/chats can access this insight
+                    let contextEntry = UserContext(
+                        id: UUID(),
+                        userId: profile.id,
+                        promptType: .readingConversation,
+                        question: "Conversation about \(elementTitle)",
+                        response: summary,
+                        createdAt: Date(),
+                        tags: "element"
+                    )
+                    
+                    try await FirestoreService.shared.saveUserContext(contextEntry)
+                    
+                    // Save the conversation with summary
+                    try await FirestoreService.shared.saveConversation(
+                        updatedConversation.closed(withSummary: summary)
+                    )
+                    print("✅ Element conversation saved with summary")
+                } else {
+                    // Just save the conversation without summary (too short or already has one)
+                    try await FirestoreService.shared.saveConversation(updatedConversation)
+                    print("✅ Element conversation saved (no summary needed)")
+                }
             } catch {
                 print("❌ Failed to save element conversation: \(error)")
             }

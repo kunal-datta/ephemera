@@ -51,6 +51,8 @@ struct BirthChartView: View {
     @State private var selectedConversation: ReadingConversation?
     @State private var selectedElementConversation: ReadingConversation?
     @State private var showChartChat = false
+    @State private var chartChatConversation: ReadingConversation?
+    @State private var isLoadingChartChat = false
     @StateObject private var conversationManager = ConversationManager.shared
     
     private var chartChatAccentColor: Color {
@@ -196,7 +198,8 @@ struct BirthChartView: View {
                         chart: chart,
                         profile: profile,
                         contexts: userContexts,
-                        accentColor: chartChatAccentColor
+                        accentColor: chartChatAccentColor,
+                        existingConversation: chartChatConversation
                     )
                     .navigationBarHidden(true)
                     .toolbar(.hidden, for: .navigationBar)
@@ -217,6 +220,30 @@ struct BirthChartView: View {
                     )
                     .navigationBarHidden(true)
                     .toolbar(.hidden, for: .navigationBar)
+                }
+            }
+        }
+    }
+    
+    /// Opens the chart chat, fetching any existing conversation first
+    private func openChartChat() {
+        isLoadingChartChat = true
+        
+        Task {
+            do {
+                chartChatConversation = try await FirestoreService.shared.fetchElementConversation(
+                    elementTitle: "Your Birth Chart"
+                )
+                
+                await MainActor.run {
+                    isLoadingChartChat = false
+                    showChartChat = true
+                }
+            } catch {
+                print("❌ Failed to fetch chart chat conversation: \(error)")
+                await MainActor.run {
+                    isLoadingChartChat = false
+                    showChartChat = true
                 }
             }
         }
@@ -1152,7 +1179,7 @@ struct BirthChartView: View {
                 .foregroundColor(Color.white.opacity(0.25))
             
             // Chat button
-            Button(action: { showChartChat = true }) {
+            Button(action: { openChartChat() }) {
                 HStack(spacing: 6) {
                     Image(systemName: "bubble.left.and.bubble.right")
                         .font(.system(size: 11))
@@ -1917,6 +1944,8 @@ struct ChartElementDetailSheet: View {
     @State private var isLoading = true
     @State private var hasAppeared = false
     @State private var showingChat = false
+    @State private var existingConversation: ReadingConversation?
+    @State private var isLoadingConversation = false
     
     var body: some View {
         ZStack {
@@ -1962,7 +1991,8 @@ struct ChartElementDetailSheet: View {
                     chart: chart,
                     profile: profile,
                     contexts: contexts,
-                    accentColor: elementColor
+                    accentColor: elementColor,
+                    existingConversation: existingConversation
                 )
                 .navigationBarHidden(true)
                 .toolbar(.hidden, for: .navigationBar)
@@ -1970,13 +2000,45 @@ struct ChartElementDetailSheet: View {
         }
     }
     
+    // MARK: - Open Chat
+    
+    private func openChat() {
+        isLoadingConversation = true
+        
+        Task {
+            do {
+                // Fetch existing conversation for this element
+                existingConversation = try await FirestoreService.shared.fetchElementConversation(
+                    elementTitle: elementTitle
+                )
+                
+                await MainActor.run {
+                    isLoadingConversation = false
+                    showingChat = true
+                }
+            } catch {
+                print("❌ Failed to fetch element conversation: \(error)")
+                await MainActor.run {
+                    isLoadingConversation = false
+                    showingChat = true  // Still show chat, just without existing conversation
+                }
+            }
+        }
+    }
+    
     // MARK: - Chat Button
     
     private var chatButton: some View {
-        Button(action: { showingChat = true }) {
+        Button(action: { openChat() }) {
             HStack(spacing: 8) {
-                Image(systemName: "bubble.left.and.bubble.right")
-                    .font(.system(size: 13))
+                if isLoadingConversation {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                        .tint(elementColor)
+                } else {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.system(size: 13))
+                }
                 Text("Ask about this placement")
                     .font(.system(size: 14, weight: .medium))
                 if conversationManager.remainingMessages > 0 {
@@ -2327,9 +2389,9 @@ struct JournalChatCard: View {
                     }
                 }
                 
-                // Status
+                // Active indicator
                 Circle()
-                    .fill(conversation.isClosed ? Color.white.opacity(0.2) : accentColor)
+                    .fill(accentColor)
                     .frame(width: 6, height: 6)
             }
             .padding(12)

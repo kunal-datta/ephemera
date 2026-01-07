@@ -398,40 +398,67 @@ class FirestoreService {
         }
         
         let snapshot = try await db.collection("users").document(userId).collection("conversations")
-            .order(by: "createdAt", descending: true)
+            .order(by: "updatedAt", descending: true)
             .getDocuments()
         
         return snapshot.documents.compactMap { parseConversation(from: $0.data()) }
     }
     
-    /// Fetches an existing open conversation for a specific timeframe and date
-    /// Returns the most recent open (not closed) conversation matching the criteria
+    /// Fetches an existing conversation for a specific timeframe reading and date
+    /// This is for READING chats only (not element chats) - filters out element conversations
     func fetchOpenConversation(timeframe: ReadingTimeframe, date: String) async throws -> ReadingConversation? {
         guard let userId = Auth.auth().currentUser?.uid else {
             throw FirestoreError.notAuthenticated
         }
         
-        print("🔍 Firestore: Fetching open conversation for timeframe=\(timeframe.rawValue), date=\(date)")
+        print("🔍 Firestore: Fetching READING conversation for timeframe=\(timeframe.rawValue), date=\(date)")
         
-        // Use a simpler query that doesn't require a composite index
-        // Fetch all open conversations for this timeframe, then filter by date in memory
+        // Fetch ALL conversations for this timeframe
         let snapshot = try await db.collection("users").document(userId).collection("conversations")
             .whereField("timeframe", isEqualTo: timeframe.rawValue)
-            .whereField("isClosed", isEqualTo: false)
             .getDocuments()
         
-        print("🔍 Firestore: Found \(snapshot.documents.count) open conversations for timeframe \(timeframe.rawValue)")
+        print("🔍 Firestore: Found \(snapshot.documents.count) conversations for timeframe \(timeframe.rawValue)")
         
-        // Filter by date and find the most recent one
+        // Filter by date AND exclude element chats (elementTitle must be nil for reading chats)
         let matchingConversations = snapshot.documents
             .compactMap { parseConversation(from: $0.data()) }
-            .filter { $0.readingDate == date }
+            .filter { $0.readingDate == date && $0.elementTitle == nil }
             .sorted { $0.createdAt > $1.createdAt }
         
         if let match = matchingConversations.first {
-            print("✅ Firestore: Found matching conversation with readingDate=\(match.readingDate)")
+            print("✅ Firestore: Found matching READING conversation with readingDate=\(match.readingDate), messages=\(match.messages.count)")
         } else {
-            print("📝 Firestore: No matching conversation found for date \(date)")
+            print("📝 Firestore: No matching reading conversation found for date \(date)")
+        }
+        
+        return matchingConversations.first
+    }
+    
+    /// Fetches an existing conversation for a specific element (e.g., "Sun in Sagittarius")
+    func fetchElementConversation(elementTitle: String) async throws -> ReadingConversation? {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            throw FirestoreError.notAuthenticated
+        }
+        
+        print("🔍 Firestore: Fetching ELEMENT conversation for elementTitle=\(elementTitle)")
+        
+        // Fetch conversations with this element title
+        let snapshot = try await db.collection("users").document(userId).collection("conversations")
+            .whereField("elementTitle", isEqualTo: elementTitle)
+            .getDocuments()
+        
+        print("🔍 Firestore: Found \(snapshot.documents.count) conversations for element '\(elementTitle)'")
+        
+        // Get the most recent one
+        let matchingConversations = snapshot.documents
+            .compactMap { parseConversation(from: $0.data()) }
+            .sorted { $0.createdAt > $1.createdAt }
+        
+        if let match = matchingConversations.first {
+            print("✅ Firestore: Found matching ELEMENT conversation with \(match.messages.count) messages")
+        } else {
+            print("📝 Firestore: No matching element conversation found for '\(elementTitle)'")
         }
         
         return matchingConversations.first
