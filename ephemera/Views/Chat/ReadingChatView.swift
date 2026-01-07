@@ -21,7 +21,7 @@ struct ReadingChatView: View {
     var readingDate: String = DateUtility.today  // Date when the reading was generated
     
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var conversationManager = ConversationManager.shared
+    @ObservedObject private var conversationManager = ConversationManager.shared
     
     @State private var conversation: ReadingConversation?
     @State private var inputText: String = ""
@@ -650,7 +650,7 @@ struct MessagesSheetView: View {
     let accentColor: Color
     
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var conversationManager = ConversationManager.shared
+    @ObservedObject private var conversationManager = ConversationManager.shared
     @State private var isPurchasing: Bool = false
     @State private var purchasedPackage: MessagePackage?
     

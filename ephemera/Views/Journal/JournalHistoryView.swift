@@ -25,7 +25,6 @@ struct JournalHistoryView: View {
     @State private var conversations: [ReadingConversation] = []
     @State private var isLoadingConversations = false
     @State private var selectedConversation: ReadingConversation?
-    @State private var showingChat = false
     
     private var userContexts: [UserContext] {
         allContexts
@@ -80,17 +79,16 @@ struct JournalHistoryView: View {
                 // Entry saved - will auto-refresh via @Query
             }
         }
-        .fullScreenCover(isPresented: $showingChat) {
-            if let conversation = selectedConversation, let chart = currentChart {
-                ReadingChatView(
-                    timeframe: conversation.timeframe,
-                    readingContent: conversation.readingContent,
-                    chart: chart,
-                    profile: profile,
-                    contexts: Array(allContexts.filter { $0.userId == profile.id }),
-                    existingConversation: conversation
-                )
-            }
+        .sheet(item: $selectedConversation) { conversation in
+            ChatViewWrapper(
+                conversation: conversation,
+                chart: currentChart,
+                profile: profile,
+                contexts: allContexts.filter { $0.userId == profile.id }
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
+            .interactiveDismissDisabled()
         }
         .onAppear {
             loadConversations()
@@ -232,7 +230,6 @@ struct JournalHistoryView: View {
                                 conversation: conversation,
                                 onTap: {
                                     selectedConversation = conversation
-                                    showingChat = true
                                 }
                             )
                         }
@@ -1522,11 +1519,10 @@ struct ChatHistoryCard: View {
     }
     
     var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 12) {
-                // Header row
-                HStack(spacing: 10) {
-                    // Timeframe icon
+        VStack(alignment: .leading, spacing: 12) {
+            // Header row
+            HStack(spacing: 10) {
+                // Timeframe icon
                     ZStack {
                         Circle()
                             .fill(accentColor.opacity(0.15))
@@ -1629,8 +1625,55 @@ struct ChatHistoryCard: View {
                             )
                     )
             )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onTap()
         }
-        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// MARK: - Chat View Wrapper
+
+/// Wrapper view to handle the case where chart might not be available yet
+struct ChatViewWrapper: View {
+    let conversation: ReadingConversation
+    let chart: BirthChart?
+    let profile: UserProfile
+    let contexts: [UserContext]
+    
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        if let chart = chart {
+            ReadingChatView(
+                timeframe: conversation.timeframe,
+                readingContent: conversation.readingContent,
+                chart: chart,
+                profile: profile,
+                contexts: Array(contexts),
+                existingConversation: conversation
+            )
+        } else {
+            // Fallback if chart not available
+            ZStack {
+                Color(red: 0.04, green: 0.04, blue: 0.09)
+                    .ignoresSafeArea()
+                
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 40))
+                        .foregroundColor(.orange.opacity(0.6))
+                    Text("Chart data unavailable")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                    Button("Go Back") {
+                        dismiss()
+                    }
+                    .foregroundColor(.white.opacity(0.5))
+                    .padding(.top, 8)
+                }
+            }
+        }
     }
 }
 

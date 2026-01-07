@@ -49,7 +49,6 @@ struct BirthChartView: View {
     @State private var conversations: [ReadingConversation] = []
     @State private var isLoadingConversations = false
     @State private var selectedConversation: ReadingConversation?
-    @State private var showingChatFromJournal = false
     
     private var currentProfile: UserProfile? {
         profiles.first
@@ -169,8 +168,8 @@ struct BirthChartView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $showingChatFromJournal) {
-            if let conversation = selectedConversation, let profile = currentProfile {
+        .fullScreenCover(item: $selectedConversation) { conversation in
+            if let profile = currentProfile {
                 ReadingChatView(
                     timeframe: conversation.timeframe,
                     readingContent: conversation.readingContent,
@@ -964,7 +963,6 @@ struct BirthChartView: View {
                         conversation: conversation,
                         onTap: {
                             selectedConversation = conversation
-                            showingChatFromJournal = true
                         }
                     )
                 }
