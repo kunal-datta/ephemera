@@ -18,6 +18,7 @@ struct ChatPresentationData: Identifiable {
     let id = UUID()
     let timeframe: ReadingTimeframe
     let reading: String
+    let readingDate: String  // The date when this reading was generated (yyyy-MM-dd)
     var existingConversation: ReadingConversation? = nil
 }
 
@@ -28,6 +29,7 @@ struct CompactTimeframeReadingView: View {
     
     @State private var currentIndex: Int = 0
     @State private var readings: [ReadingTimeframe: String] = [:]
+    @State private var readingDates: [ReadingTimeframe: String] = [:]  // Tracks when each reading was generated
     @State private var loadingStates: [ReadingTimeframe: Bool] = [:]
     @State private var errorStates: [ReadingTimeframe: String?] = [:]
     @State private var chatPresentation: ChatPresentationData? = nil
@@ -96,7 +98,8 @@ struct CompactTimeframeReadingView: View {
                     chart: chart,
                     profile: profile,
                     contexts: contexts,
-                    existingConversation: data.existingConversation
+                    existingConversation: data.existingConversation,
+                    readingDate: data.readingDate
                 )
                 .navigationBarHidden(true)
                 .toolbar(.hidden, for: .navigationBar)
@@ -107,36 +110,49 @@ struct CompactTimeframeReadingView: View {
     // MARK: - Chat Opening Logic
     
     /// Opens chat for a timeframe, checking for existing open conversations first
+    /// The conversation is tied to the reading's generation date, not just today
     private func openChatForTimeframe(_ timeframe: ReadingTimeframe, reading: String) {
         isLoadingConversation = true
         
+        // Use the reading's cached date, falling back to today if not found
+        let readingDate = readingDates[timeframe] ?? DateUtility.today
+        
+        print("🔍 Looking for existing conversation: timeframe=\(timeframe.rawValue), date=\(readingDate)")
+        
         Task {
             do {
-                // Get today's date in the format used by conversations
-                let todayString = DateUtility.today
-                
-                // Check if there's an existing open conversation for this timeframe today
+                // Check if there's an existing open conversation for this reading
+                // We match by timeframe AND the reading's generation date
                 let existingConversation = try await FirestoreService.shared.fetchOpenConversation(
                     timeframe: timeframe,
-                    date: todayString
+                    date: readingDate
                 )
+                
+                if let existing = existingConversation {
+                    print("✅ Found existing conversation with \(existing.messages.count) messages")
+                } else {
+                    print("📝 No existing conversation found, will create new one")
+                }
                 
                 await MainActor.run {
                     isLoadingConversation = false
                     chatPresentation = ChatPresentationData(
                         timeframe: timeframe,
                         reading: reading,
+                        readingDate: readingDate,
                         existingConversation: existingConversation
                     )
                 }
             } catch {
                 print("❌ Failed to check for existing conversation: \(error)")
+                print("❌ Error details: \(error.localizedDescription)")
                 await MainActor.run {
                     isLoadingConversation = false
                     // Open without existing conversation on error
                     chatPresentation = ChatPresentationData(
                         timeframe: timeframe,
-                        reading: reading
+                        reading: reading,
+                        readingDate: readingDate
                     )
                 }
             }
@@ -205,6 +221,7 @@ struct CompactTimeframeReadingView: View {
         // Check cache first
         if !forceRefresh, let cached = loadCachedReading(for: timeframe), cached.isValid {
             readings[timeframe] = cached.reading
+            readingDates[timeframe] = cached.date  // Track the cached reading's date
             return
         }
         
@@ -222,7 +239,9 @@ struct CompactTimeframeReadingView: View {
                 )
                 
                 await MainActor.run {
+                    let todayString = CachedTimeframeReading.dateFormatter.string(from: Date())
                     readings[timeframe] = reading
+                    readingDates[timeframe] = todayString  // New reading is dated today
                     loadingStates[timeframe] = false
                     saveCachedReading(reading, for: timeframe)
                 }

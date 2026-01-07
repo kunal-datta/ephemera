@@ -264,16 +264,22 @@ class ConversationManager: ObservableObject {
     }
     
     /// Starts a new conversation for a reading
+    /// - Parameters:
+    ///   - userId: The user's ID
+    ///   - timeframe: The timeframe of the reading
+    ///   - readingContent: The content of the reading
+    ///   - readingDate: The date the reading was generated (defaults to today)
     func startConversation(
         userId: UUID,
         timeframe: ReadingTimeframe,
-        readingContent: String
+        readingContent: String,
+        readingDate: String = DateUtility.today
     ) -> ReadingConversation {
         let conversation = ReadingConversation(
             userId: userId,
             timeframe: timeframe,
             readingContent: readingContent,
-            readingDate: DateUtility.today
+            readingDate: readingDate
         )
         activeConversation = conversation
         return conversation

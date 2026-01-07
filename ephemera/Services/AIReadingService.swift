@@ -105,6 +105,8 @@ enum ReadingTimeframe: String, CaseIterable, Codable {
     }
     
     /// Check if a cached reading is still valid
+    /// - Daily readings: Valid for the same day
+    /// - Weekly/Monthly/Yearly readings: Refresh every 3 days (to incorporate new contexts)
     func isCacheValid(cachedDate: String) -> Bool {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
@@ -113,32 +115,15 @@ enum ReadingTimeframe: String, CaseIterable, Codable {
         
         switch self {
         case .day:
+            // Daily readings are valid only for today
             return cachedDate == formatter.string(from: today)
             
-        case .week:
-            // Valid for the same week
+        case .week, .month, .year:
+            // Weekly, monthly, and yearly readings refresh every 3 days
+            // to incorporate new user contexts
             guard let cached = formatter.date(from: cachedDate) else { return false }
-            let cachedWeek = calendar.component(.weekOfYear, from: cached)
-            let cachedYear = calendar.component(.year, from: cached)
-            let currentWeek = calendar.component(.weekOfYear, from: today)
-            let currentYear = calendar.component(.year, from: today)
-            return cachedWeek == currentWeek && cachedYear == currentYear
-            
-        case .month:
-            // Valid for the same month
-            guard let cached = formatter.date(from: cachedDate) else { return false }
-            let cachedMonth = calendar.component(.month, from: cached)
-            let cachedYear = calendar.component(.year, from: cached)
-            let currentMonth = calendar.component(.month, from: today)
-            let currentYear = calendar.component(.year, from: today)
-            return cachedMonth == currentMonth && cachedYear == currentYear
-            
-        case .year:
-            // Valid for the same year
-            guard let cached = formatter.date(from: cachedDate) else { return false }
-            let cachedYear = calendar.component(.year, from: cached)
-            let currentYear = calendar.component(.year, from: today)
-            return cachedYear == currentYear
+            let daysDifference = calendar.dateComponents([.day], from: cached, to: today).day ?? 0
+            return daysDifference < 3
         }
     }
 }

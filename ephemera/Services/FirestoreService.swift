@@ -383,7 +383,7 @@ class FirestoreService {
         ]
         
         try await db.collection("users").document(userId).collection("conversations").document(conversation.id.uuidString).setData(data)
-        print("✅ Conversation saved to Firestore for userId: \(userId)")
+        print("✅ Conversation saved: id=\(conversation.id.uuidString), timeframe=\(conversation.timeframe.rawValue), readingDate=\(conversation.readingDate), messages=\(conversation.messages.count), isClosed=\(conversation.isClosed)")
     }
     
     /// Fetches all conversations for the current user
@@ -406,19 +406,30 @@ class FirestoreService {
             throw FirestoreError.notAuthenticated
         }
         
+        print("🔍 Firestore: Fetching open conversation for timeframe=\(timeframe.rawValue), date=\(date)")
+        
+        // Use a simpler query that doesn't require a composite index
+        // Fetch all open conversations for this timeframe, then filter by date in memory
         let snapshot = try await db.collection("users").document(userId).collection("conversations")
             .whereField("timeframe", isEqualTo: timeframe.rawValue)
-            .whereField("readingDate", isEqualTo: date)
             .whereField("isClosed", isEqualTo: false)
-            .order(by: "createdAt", descending: true)
-            .limit(to: 1)
             .getDocuments()
         
-        guard let document = snapshot.documents.first else {
-            return nil
+        print("🔍 Firestore: Found \(snapshot.documents.count) open conversations for timeframe \(timeframe.rawValue)")
+        
+        // Filter by date and find the most recent one
+        let matchingConversations = snapshot.documents
+            .compactMap { parseConversation(from: $0.data()) }
+            .filter { $0.readingDate == date }
+            .sorted { $0.createdAt > $1.createdAt }
+        
+        if let match = matchingConversations.first {
+            print("✅ Firestore: Found matching conversation with readingDate=\(match.readingDate)")
+        } else {
+            print("📝 Firestore: No matching conversation found for date \(date)")
         }
         
-        return parseConversation(from: document.data())
+        return matchingConversations.first
     }
     
     /// Fetches recent conversation summaries for context

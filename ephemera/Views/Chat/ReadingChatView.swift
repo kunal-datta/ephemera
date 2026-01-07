@@ -18,6 +18,7 @@ struct ReadingChatView: View {
     let profile: UserProfile
     let contexts: [UserContext]
     var existingConversation: ReadingConversation? = nil
+    var readingDate: String = DateUtility.today  // Date when the reading was generated
     
     @Environment(\.dismiss) private var dismiss
     @StateObject private var conversationManager = ConversationManager.shared
@@ -412,11 +413,12 @@ struct ReadingChatView: View {
             conversation = existing
             conversationManager.activeConversation = existing
         } else {
-            // Start new conversation
+            // Start new conversation with the reading's generation date
             conversation = conversationManager.startConversation(
                 userId: profile.id,
                 timeframe: timeframe,
-                readingContent: readingContent
+                readingContent: readingContent,
+                readingDate: readingDate
             )
         }
     }
