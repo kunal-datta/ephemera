@@ -369,7 +369,7 @@ class FirestoreService {
         encoder.dateEncodingStrategy = .iso8601
         let messagesJSON = try String(data: encoder.encode(conversation.messages), encoding: .utf8) ?? "[]"
         
-        let data: [String: Any] = [
+        var data: [String: Any] = [
             "id": conversation.id.uuidString,
             "userId": conversation.userId.uuidString,
             "timeframe": conversation.timeframe.rawValue,
@@ -382,8 +382,13 @@ class FirestoreService {
             "isClosed": conversation.isClosed
         ]
         
+        // Add elementTitle if present (for element-based chats)
+        if let elementTitle = conversation.elementTitle {
+            data["elementTitle"] = elementTitle
+        }
+        
         try await db.collection("users").document(userId).collection("conversations").document(conversation.id.uuidString).setData(data)
-        print("✅ Conversation saved: id=\(conversation.id.uuidString), timeframe=\(conversation.timeframe.rawValue), readingDate=\(conversation.readingDate), messages=\(conversation.messages.count), isClosed=\(conversation.isClosed)")
+        print("✅ Conversation saved: id=\(conversation.id.uuidString), element=\(conversation.elementTitle ?? conversation.timeframe.rawValue), readingDate=\(conversation.readingDate), messages=\(conversation.messages.count), isClosed=\(conversation.isClosed)")
     }
     
     /// Fetches all conversations for the current user
@@ -470,6 +475,7 @@ class FirestoreService {
         let messages: [ChatMessage] = (try? decoder.decode([ChatMessage].self, from: Data(messagesJSON.utf8))) ?? []
         
         let updatedAtTimestamp = data["updatedAt"] as? Timestamp ?? createdAtTimestamp
+        let elementTitle = data["elementTitle"] as? String
         let summary = data["summary"] as? String
         let isClosed = data["isClosed"] as? Bool ?? false
         
@@ -482,6 +488,7 @@ class FirestoreService {
             messages: messages,
             createdAt: createdAtTimestamp.dateValue(),
             updatedAt: updatedAtTimestamp.dateValue(),
+            elementTitle: elementTitle,
             summary: summary,
             isClosed: isClosed
         )

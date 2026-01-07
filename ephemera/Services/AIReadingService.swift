@@ -1064,6 +1064,98 @@ extension AIReadingService {
         return text
     }
     
+    // MARK: - Element Chat Conversations
+    
+    /// Continues a conversation about a specific chart element or placement
+    func continueElementConversation(
+        elementTitle: String,
+        elementContent: String,
+        messages: [ChatMessage],
+        userMessage: String,
+        chart: BirthChart,
+        profile: UserProfile,
+        contexts: [UserContext]
+    ) async throws -> String {
+        let prompt = buildElementConversationPrompt(
+            elementTitle: elementTitle,
+            elementContent: elementContent,
+            messages: messages,
+            userMessage: userMessage,
+            chart: chart,
+            profile: profile,
+            contexts: contexts
+        )
+        
+        let response = try await model.generateContent(prompt)
+        
+        guard let text = response.text else {
+            throw AIReadingError.noResponse
+        }
+        
+        return text
+    }
+    
+    private func buildElementConversationPrompt(
+        elementTitle: String,
+        elementContent: String,
+        messages: [ChatMessage],
+        userMessage: String,
+        chart: BirthChart,
+        profile: UserProfile,
+        contexts: [UserContext]
+    ) -> String {
+        let chartSummary = buildChartSummary(chart: chart)
+        let contextSummary = contexts.recentEntries(5).formattedForPrompt()
+        let currentDate = formatCurrentDate()
+        
+        // Format message history
+        let conversationHistory = messages.isEmpty ? "No messages yet." : messages.map { message in
+            let role = message.role == .user ? "User" : "Astrologer"
+            return "\(role): \(message.content)"
+        }.joined(separator: "\n\n")
+        
+        return """
+        You are a wise, compassionate evolutionary astrologer having a conversation about a specific aspect of \(profile.name)'s birth chart.
+        
+        ## Your Role
+        You're exploring "\(elementTitle)" with \(profile.name). You've already provided an initial explanation, and they want to understand it more deeply. Be warm, insightful, and specific to their chart.
+        
+        ## Guidelines
+        - Keep responses conversational and concise (50-100 words typically, up to 150 if needed)
+        - Connect this placement to other parts of their chart when relevant
+        - Help them understand how this manifests in their daily life
+        - If they ask about unrelated topics, gently redirect: "That's interesting—but let's stay with your \(elementTitle) for now. How does this placement feel in your life?"
+        - You're having a dialogue, not delivering a lecture
+        - End with a question or reflection to deepen understanding (unless they seem done)
+        - Never discuss other users or claim to access data beyond what's provided
+        - Don't start with "Great question!" or similar filler
+        - Write in second person ("You...")
+        
+        ## Today's Date
+        \(currentDate)
+        
+        ## The Placement Being Discussed
+        \(elementTitle)
+        
+        ## Your Initial Explanation
+        \(elementContent)
+        
+        ## Their Full Birth Chart
+        \(chartSummary)
+        
+        ## What They've Shared About Their Life
+        \(contextSummary)
+        
+        ## Conversation So Far
+        \(conversationHistory)
+        
+        ## Their Latest Message
+        User: \(userMessage)
+        
+        Respond as the astrologer. Be warm, specific, and insightful. Help them understand this placement in the context of their whole chart.
+        """
+    }
+    
     private func buildConversationPrompt(
         conversation: ReadingConversation,
         userMessage: String,

@@ -10,6 +10,83 @@
 //
 
 import Foundation
+import SwiftUI
+
+// MARK: - Chat Context
+
+/// Defines what triggered the chat conversation
+enum ChatContext: Codable, Equatable {
+    /// Chat from a timeframe reading (day, week, month, year)
+    case timeframeReading(timeframe: ReadingTimeframe)
+    
+    /// Chat from the natal chart reading view
+    case natalReading
+    
+    /// Chat from a specific chart element (planet, aspect, etc.)
+    case chartElement(elementDescription: String)
+    
+    /// Chat about the entire birth chart
+    case birthChart
+    
+    var displayTitle: String {
+        switch self {
+        case .timeframeReading(let timeframe):
+            return "Your \(timeframe.displayTitle)"
+        case .natalReading:
+            return "Your Reading"
+        case .chartElement(let description):
+            return description
+        case .birthChart:
+            return "Your Chart"
+        }
+    }
+    
+    var icon: String {
+        switch self {
+        case .timeframeReading(let timeframe):
+            return timeframe.icon
+        case .natalReading:
+            return "sparkles"
+        case .chartElement:
+            return "circle.hexagongrid"
+        case .birthChart:
+            return "circle.hexagongrid.fill"
+        }
+    }
+    
+    var accentColor: Color {
+        switch self {
+        case .timeframeReading(let timeframe):
+            switch timeframe {
+            case .day: return Color(red: 0.95, green: 0.75, blue: 0.4)
+            case .week: return Color(red: 0.5, green: 0.7, blue: 0.9)
+            case .month: return Color(red: 0.7, green: 0.6, blue: 0.85)
+            case .year: return Color(red: 0.9, green: 0.6, blue: 0.7)
+            }
+        case .natalReading:
+            return Color(red: 0.7, green: 0.65, blue: 0.8)
+        case .chartElement:
+            return Color(red: 0.6, green: 0.7, blue: 0.85)
+        case .birthChart:
+            return Color(red: 0.65, green: 0.55, blue: 0.8)
+        }
+    }
+    
+    /// A unique key for caching/storing conversations by context
+    var contextKey: String {
+        switch self {
+        case .timeframeReading(let timeframe):
+            return "timeframe_\(timeframe.rawValue)"
+        case .natalReading:
+            return "natal_reading"
+        case .chartElement(let description):
+            // Sanitize description for use as key
+            return "element_\(description.lowercased().replacingOccurrences(of: " ", with: "_"))"
+        case .birthChart:
+            return "birth_chart"
+        }
+    }
+}
 
 // MARK: - Chat Message
 
@@ -35,7 +112,7 @@ struct ChatMessage: Identifiable, Codable, Equatable {
 
 // MARK: - Reading Conversation
 
-/// A conversation anchored to a specific reading
+/// A conversation anchored to a specific reading or chart element
 /// Stored in Firestore under users/{userId}/conversations/{conversationId}
 struct ReadingConversation: Identifiable, Codable {
     let id: UUID
@@ -47,11 +124,28 @@ struct ReadingConversation: Identifiable, Codable {
     let createdAt: Date
     let updatedAt: Date
     
+    /// For element-based chats (e.g., "Sun in Capricorn", "Your Birth Chart")
+    /// When set, this indicates an element chat rather than a timeframe reading chat
+    var elementTitle: String?
+    
     /// Summary generated after conversation ends (for context in future readings)
     var summary: String?
     
     /// Whether the conversation has been summarized and closed
     var isClosed: Bool
+    
+    /// Whether this is an element-based conversation
+    var isElementChat: Bool {
+        elementTitle != nil
+    }
+    
+    /// Display title for the conversation
+    var displayTitle: String {
+        if let element = elementTitle {
+            return element
+        }
+        return "\(timeframe.displayTitle) Reading"
+    }
     
     init(
         id: UUID = UUID(),
@@ -62,6 +156,7 @@ struct ReadingConversation: Identifiable, Codable {
         messages: [ChatMessage] = [],
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
+        elementTitle: String? = nil,
         summary: String? = nil,
         isClosed: Bool = false
     ) {
@@ -73,6 +168,7 @@ struct ReadingConversation: Identifiable, Codable {
         self.messages = messages
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.elementTitle = elementTitle
         self.summary = summary
         self.isClosed = isClosed
     }
@@ -88,6 +184,7 @@ struct ReadingConversation: Identifiable, Codable {
             messages: messages + [message],
             createdAt: createdAt,
             updatedAt: Date(),
+            elementTitle: elementTitle,
             summary: summary,
             isClosed: isClosed
         )
@@ -104,6 +201,7 @@ struct ReadingConversation: Identifiable, Codable {
             messages: messages,
             createdAt: createdAt,
             updatedAt: Date(),
+            elementTitle: elementTitle,
             summary: summary,
             isClosed: true
         )

@@ -17,6 +17,7 @@ struct ChartReadingView: View {
     
     @Query private var contexts: [UserContext]
     @StateObject private var readingService = AIReadingService.shared
+    @StateObject private var conversationManager = ConversationManager.shared
     @Environment(\.dismiss) private var dismiss
     
     @State private var reading: AIReading?
@@ -24,10 +25,15 @@ struct ChartReadingView: View {
     @State private var expandedSections: Set<UUID> = []
     @State private var hasAppeared = false
     @State private var currentCardIndex = 0
+    @State private var showingChat = false
     
     // Filter contexts for this user
     private var userContexts: [UserContext] {
         contexts.filter { $0.userId == profile.id }
+    }
+    
+    private var accentColor: Color {
+        Color(red: 0.7, green: 0.65, blue: 0.8)
     }
     
     var body: some View {
@@ -57,6 +63,19 @@ struct ChartReadingView: View {
             } else {
                 // Initial state - will auto-generate
                 loadingView
+            }
+            
+            // Floating chat button
+            if reading != nil {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        floatingChatButton
+                            .padding(.trailing, 20)
+                            .padding(.bottom, 24)
+                    }
+                }
             }
         }
         .navigationBarBackButtonHidden(true)
@@ -92,6 +111,46 @@ struct ChartReadingView: View {
         } message: {
             Text(readingService.error ?? "An unexpected error occurred.")
         }
+        .fullScreenCover(isPresented: $showingChat) {
+            if let reading = reading {
+                NavigationStack {
+                    ElementChatView(
+                        elementTitle: "Your Reading",
+                        elementContent: reading.content,
+                        chart: chart,
+                        profile: profile,
+                        contexts: userContexts,
+                        accentColor: accentColor
+                    )
+                    .navigationBarHidden(true)
+                    .toolbar(.hidden, for: .navigationBar)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Floating Chat Button
+    
+    private var floatingChatButton: some View {
+        Button(action: { showingChat = true }) {
+            HStack(spacing: 8) {
+                Image(systemName: "bubble.left.and.bubble.right.fill")
+                    .font(.system(size: 16))
+                Text("Ask")
+                    .font(.system(size: 15, weight: .semibold))
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            .background(
+                Capsule()
+                    .fill(accentColor)
+                    .shadow(color: accentColor.opacity(0.4), radius: 12, x: 0, y: 6)
+            )
+        }
+        .buttonStyle(ScaleButtonStyle())
+        .disabled(!conversationManager.canSendMessage)
+        .opacity(conversationManager.canSendMessage ? 1 : 0.6)
     }
     
     // MARK: - Loading View

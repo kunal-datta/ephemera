@@ -49,6 +49,13 @@ struct BirthChartView: View {
     @State private var conversations: [ReadingConversation] = []
     @State private var isLoadingConversations = false
     @State private var selectedConversation: ReadingConversation?
+    @State private var selectedElementConversation: ReadingConversation?
+    @State private var showChartChat = false
+    @StateObject private var conversationManager = ConversationManager.shared
+    
+    private var chartChatAccentColor: Color {
+        Color(red: 0.65, green: 0.55, blue: 0.8)
+    }
     
     private var currentProfile: UserProfile? {
         profiles.first
@@ -180,6 +187,61 @@ struct BirthChartView: View {
                 )
             }
         }
+        .fullScreenCover(isPresented: $showChartChat) {
+            if let profile = currentProfile {
+                NavigationStack {
+                    ElementChatView(
+                        elementTitle: "Your Birth Chart",
+                        elementContent: buildChartSummaryForChat(),
+                        chart: chart,
+                        profile: profile,
+                        contexts: userContexts,
+                        accentColor: chartChatAccentColor
+                    )
+                    .navigationBarHidden(true)
+                    .toolbar(.hidden, for: .navigationBar)
+                }
+            }
+        }
+        .fullScreenCover(item: $selectedElementConversation) { conversation in
+            if let profile = currentProfile {
+                NavigationStack {
+                    ElementChatView(
+                        elementTitle: conversation.elementTitle ?? "Chat",
+                        elementContent: conversation.readingContent,
+                        chart: chart,
+                        profile: profile,
+                        contexts: userContexts,
+                        accentColor: chartChatAccentColor,
+                        existingConversation: conversation
+                    )
+                    .navigationBarHidden(true)
+                    .toolbar(.hidden, for: .navigationBar)
+                }
+            }
+        }
+    }
+    
+    /// Builds a concise summary of the chart for the chat context
+    private func buildChartSummaryForChat() -> String {
+        var parts: [String] = []
+        
+        // Big three
+        if let sun = chart.position(for: .sun) {
+            parts.append("Sun in \(sun.sign.rawValue)")
+        }
+        if let moon = chart.position(for: .moon) {
+            parts.append("Moon in \(moon.sign.rawValue)")
+        }
+        if let rising = chart.risingSign {
+            parts.append("\(rising.rawValue) Rising")
+        }
+        
+        if parts.isEmpty {
+            return "Your unique astrological blueprint"
+        }
+        
+        return "Your chart: \(parts.joined(separator: ", ")). Ask me anything about your placements, aspects, or how the planets influence your life."
     }
     
     // MARK: - Segmented Control
@@ -939,6 +1001,12 @@ struct BirthChartView: View {
     
     // MARK: - Journal Chats Section
     
+    @State private var showAllConversations = false
+    
+    private var displayedConversations: [ReadingConversation] {
+        showAllConversations ? conversations : Array(conversations.prefix(3))
+    }
+    
     private var journalChatsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -946,7 +1014,7 @@ struct BirthChartView: View {
                     .font(.system(size: 12))
                     .foregroundColor(Color(red: 0.95, green: 0.75, blue: 0.4))
                 
-                Text("Recent Chats")
+                Text("Continue the conversation")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(Color.white.opacity(0.5))
                 
@@ -958,14 +1026,40 @@ struct BirthChartView: View {
             }
             
             LazyVStack(spacing: 10) {
-                ForEach(conversations.prefix(3), id: \.id) { conversation in
+                ForEach(displayedConversations, id: \.id) { conversation in
                     JournalChatCard(
                         conversation: conversation,
                         onTap: {
-                            selectedConversation = conversation
+                            if conversation.isElementChat {
+                                // Open element chat view for element-based conversations
+                                selectedElementConversation = conversation
+                            } else {
+                                // Open reading chat view for timeframe-based conversations
+                                selectedConversation = conversation
+                            }
                         }
                     )
                 }
+            }
+            
+            // Show more / Show less button
+            if conversations.count > 3 {
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showAllConversations.toggle()
+                    }
+                }) {
+                    HStack(spacing: 6) {
+                        Text(showAllConversations ? "Show less" : "Show all \(conversations.count) chats")
+                            .font(.system(size: 13, weight: .medium))
+                        Image(systemName: showAllConversations ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10, weight: .medium))
+                    }
+                    .foregroundColor(Color(red: 0.95, green: 0.75, blue: 0.4).opacity(0.8))
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 8)
+                }
+                .buttonStyle(PlainButtonStyle())
             }
         }
         .padding(16)
@@ -1033,22 +1127,46 @@ struct BirthChartView: View {
     // MARK: - Reading Link (appears under chart)
     
     private var readingLink: some View {
-        Button(action: { showReading = true }) {
-            HStack(spacing: 8) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 12))
-                    .foregroundColor(Color(red: 0.65, green: 0.55, blue: 0.8))
-                
-                Text("Get your in-depth reading for today")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(Color.white.opacity(0.5))
-                
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(Color.white.opacity(0.3))
+        HStack(spacing: 16) {
+            // Reading button
+            Button(action: { showReading = true }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 12))
+                        .foregroundColor(chartChatAccentColor)
+                    
+                    Text("Your reading")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(Color.white.opacity(0.5))
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(Color.white.opacity(0.3))
+                }
             }
+            .buttonStyle(PlainButtonStyle())
+            
+            // Divider
+            Text("·")
+                .font(.system(size: 14))
+                .foregroundColor(Color.white.opacity(0.25))
+            
+            // Chat button
+            Button(action: { showChartChat = true }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.system(size: 11))
+                        .foregroundColor(chartChatAccentColor)
+                    
+                    Text("Ask about your chart")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(Color.white.opacity(0.5))
+                }
+            }
+            .buttonStyle(PlainButtonStyle())
+            .disabled(!conversationManager.canSendMessage)
+            .opacity(conversationManager.canSendMessage ? 1 : 0.5)
         }
-        .buttonStyle(PlainButtonStyle())
     }
     
     // MARK: - Journal Entry Button
@@ -1794,9 +1912,11 @@ struct ChartElementDetailSheet: View {
     
     @Environment(\.dismiss) private var dismiss
     @StateObject private var aiService = AIReadingService.shared
+    @StateObject private var conversationManager = ConversationManager.shared
     @State private var explanation: String?
     @State private var isLoading = true
     @State private var hasAppeared = false
+    @State private var showingChat = false
     
     var body: some View {
         ZStack {
@@ -1817,6 +1937,10 @@ struct ChartElementDetailSheet: View {
                         loadingView
                     } else if let explanation = explanation {
                         explanationContent(explanation)
+                        
+                        // Chat button
+                        chatButton
+                            .padding(.top, 8)
                     }
                     
                     Spacer(minLength: 20)
@@ -1830,6 +1954,53 @@ struct ChartElementDetailSheet: View {
                 generateExplanation()
             }
         }
+        .fullScreenCover(isPresented: $showingChat) {
+            NavigationStack {
+                ElementChatView(
+                    elementTitle: elementTitle,
+                    elementContent: explanation ?? "",
+                    chart: chart,
+                    profile: profile,
+                    contexts: contexts,
+                    accentColor: elementColor
+                )
+                .navigationBarHidden(true)
+                .toolbar(.hidden, for: .navigationBar)
+            }
+        }
+    }
+    
+    // MARK: - Chat Button
+    
+    private var chatButton: some View {
+        Button(action: { showingChat = true }) {
+            HStack(spacing: 8) {
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.system(size: 13))
+                Text("Ask about this placement")
+                    .font(.system(size: 14, weight: .medium))
+                if conversationManager.remainingMessages > 0 {
+                    Text("(\(conversationManager.remainingMessages))")
+                        .font(.system(size: 12))
+                        .foregroundColor(elementColor.opacity(0.6))
+                }
+            }
+            .foregroundColor(elementColor)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(elementColor.opacity(0.12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(elementColor.opacity(0.25), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .disabled(!conversationManager.canSendMessage)
+        .opacity(conversationManager.canSendMessage ? 1 : 0.5)
     }
     
     private var elementHeader: some View {
@@ -2089,12 +2260,24 @@ struct JournalChatCard: View {
     let onTap: () -> Void
     
     private var accentColor: Color {
+        // Use a different color for element chats
+        if conversation.isElementChat {
+            return Color(red: 0.65, green: 0.55, blue: 0.8)
+        }
+        
         switch conversation.timeframe {
         case .day: return Color(red: 0.95, green: 0.75, blue: 0.4)
         case .week: return Color(red: 0.5, green: 0.7, blue: 0.9)
         case .month: return Color(red: 0.7, green: 0.6, blue: 0.85)
         case .year: return Color(red: 0.9, green: 0.6, blue: 0.7)
         }
+    }
+    
+    private var iconName: String {
+        if conversation.isElementChat {
+            return "circle.hexagongrid"
+        }
+        return conversation.timeframe.icon
     }
     
     private var formattedDate: String {
@@ -2112,7 +2295,7 @@ struct JournalChatCard: View {
                         .fill(accentColor.opacity(0.15))
                         .frame(width: 32, height: 32)
                     
-                    Image(systemName: conversation.timeframe.icon)
+                    Image(systemName: iconName)
                         .font(.system(size: 12))
                         .foregroundColor(accentColor)
                 }
@@ -2120,9 +2303,10 @@ struct JournalChatCard: View {
                 // Content
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {
-                        Text("\(conversation.timeframe.displayTitle) Reading")
+                        Text(conversation.displayTitle)
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(.white)
+                            .lineLimit(1)
                         
                         Spacer()
                         
