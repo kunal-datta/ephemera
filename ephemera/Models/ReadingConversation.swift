@@ -125,17 +125,17 @@ struct ReadingConversation: Identifiable, Codable {
     }
 }
 
-// MARK: - Credits System
+// MARK: - Messages System
 
-/// Credit packages available for purchase
-enum CreditPackage: CaseIterable, Identifiable {
-    case small   // 10 credits
-    case medium  // 30 credits
-    case large   // 100 credits
+/// Message packages available for purchase
+enum MessagePackage: CaseIterable, Identifiable {
+    case small   // 10 messages
+    case medium  // 30 messages
+    case large   // 100 messages
     
     var id: String { title }
     
-    var credits: Int {
+    var messageCount: Int {
         switch self {
         case .small: return 10
         case .medium: return 30
@@ -168,14 +168,14 @@ enum CreditPackage: CaseIterable, Identifiable {
     }
 }
 
-/// Tracks user's credit balance
-struct CreditBalance: Codable {
-    var credits: Int
+/// Tracks user's message balance
+struct MessageBalance: Codable {
+    var messages: Int
     var totalPurchased: Int  // Track lifetime purchases for analytics
     var lastUpdated: Date
     
-    static var initial: CreditBalance {
-        CreditBalance(credits: 10, totalPurchased: 0, lastUpdated: Date())
+    static var initial: MessageBalance {
+        MessageBalance(messages: 10, totalPurchased: 0, lastUpdated: Date())
     }
 }
 
@@ -195,33 +195,33 @@ enum DateUtility {
 
 // MARK: - Conversation Manager
 
-/// Manages conversation state and credits
+/// Manages conversation state and message balance
 @MainActor
 class ConversationManager: ObservableObject {
     static let shared = ConversationManager()
     
-    /// Starting credits for new users
-    static let initialCredits = 10
+    /// Starting messages for new users
+    static let initialMessages = 10
     
-    @Published var creditBalance: CreditBalance
+    @Published var messageBalance: MessageBalance
     @Published var activeConversation: ReadingConversation?
     
-    private let creditsKey = "userCreditBalance"
+    private let balanceKey = "userMessageBalance"
     
     private init() {
-        // Load or create credit balance
-        if let data = UserDefaults.standard.data(forKey: creditsKey),
-           let balance = try? JSONDecoder().decode(CreditBalance.self, from: data) {
-            self.creditBalance = balance
+        // Load or create message balance
+        if let data = UserDefaults.standard.data(forKey: balanceKey),
+           let balance = try? JSONDecoder().decode(MessageBalance.self, from: data) {
+            self.messageBalance = balance
         } else {
-            self.creditBalance = CreditBalance.initial
+            self.messageBalance = MessageBalance.initial
             saveBalance()
         }
     }
     
-    /// Remaining messages (credits)
+    /// Remaining messages
     var remainingMessages: Int {
-        creditBalance.credits
+        messageBalance.messages
     }
     
     /// Whether the user can send more messages
@@ -229,37 +229,37 @@ class ConversationManager: ObservableObject {
         remainingMessages > 0
     }
     
-    /// Whether credits are running low (show gentle reminder)
-    var isLowOnCredits: Bool {
+    /// Whether messages are running low (show gentle reminder)
+    var isLowOnMessages: Bool {
         remainingMessages > 0 && remainingMessages <= 3
     }
     
-    /// Records a message sent and deducts a credit
+    /// Records a message sent and deducts from balance
     func recordMessageSent() {
-        creditBalance.credits = max(0, creditBalance.credits - 1)
-        creditBalance.lastUpdated = Date()
+        messageBalance.messages = max(0, messageBalance.messages - 1)
+        messageBalance.lastUpdated = Date()
         saveBalance()
     }
     
-    /// Adds credits (from purchase or promo)
-    func addCredits(_ amount: Int) {
-        creditBalance.credits += amount
-        creditBalance.totalPurchased += amount
-        creditBalance.lastUpdated = Date()
+    /// Adds messages (from purchase or promo)
+    func addMessages(_ amount: Int) {
+        messageBalance.messages += amount
+        messageBalance.totalPurchased += amount
+        messageBalance.lastUpdated = Date()
         saveBalance()
     }
     
-    /// Purchases a credit package (mocked for now)
-    func purchasePackage(_ package: CreditPackage) async -> Bool {
+    /// Purchases a message package (mocked for now)
+    func purchasePackage(_ package: MessagePackage) async -> Bool {
         // TODO: Integrate real payment flow (StoreKit, Stripe, etc.)
-        // For now, just add the credits immediately
-        addCredits(package.credits)
+        // For now, just add the messages immediately
+        addMessages(package.messageCount)
         return true
     }
     
     private func saveBalance() {
-        if let data = try? JSONEncoder().encode(creditBalance) {
-            UserDefaults.standard.set(data, forKey: creditsKey)
+        if let data = try? JSONEncoder().encode(messageBalance) {
+            UserDefaults.standard.set(data, forKey: balanceKey)
         }
     }
     

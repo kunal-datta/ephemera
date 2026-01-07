@@ -27,7 +27,7 @@ struct ReadingChatView: View {
     @State private var isLoading: Bool = false
     @State private var showingEndConfirmation: Bool = false
     @State private var isSummarizing: Bool = false
-    @State private var showingCreditsSheet: Bool = false
+    @State private var showingMessagesSheet: Bool = false
     @FocusState private var isInputFocused: Bool
     
     // Scroll state
@@ -69,8 +69,8 @@ struct ReadingChatView: View {
                 
                 Spacer()
                 
-                // Credits indicator with Get More button
-                Button(action: { showingCreditsSheet = true }) {
+                // Messages indicator with Get More button
+                Button(action: { showingMessagesSheet = true }) {
                     HStack(spacing: 4) {
                         Image(systemName: "sparkles")
                             .font(.system(size: 10))
@@ -82,7 +82,7 @@ struct ReadingChatView: View {
                         }
                     }
                     .foregroundColor(conversationManager.canSendMessage ? 
-                        (conversationManager.isLowOnCredits ? .orange : .white.opacity(0.6)) : 
+                        (conversationManager.isLowOnMessages ? .orange : .white.opacity(0.6)) : 
                         accentColor)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
@@ -175,17 +175,17 @@ struct ReadingChatView: View {
             
             // Input area
             if !isReadOnly && !conversationManager.canSendMessage {
-                // Out of credits prompt
+                // Out of messages prompt
                 VStack(spacing: 12) {
-                    Text("You're out of message credits")
+                    Text("You're out of messages")
                         .font(.system(size: 14))
                         .foregroundColor(.white.opacity(0.6))
                     
-                    Button(action: { showingCreditsSheet = true }) {
+                    Button(action: { showingMessagesSheet = true }) {
                         HStack(spacing: 8) {
                             Image(systemName: "sparkles")
                                 .font(.system(size: 14))
-                            Text("Get More Credits")
+                            Text("Get More Messages")
                                 .font(.system(size: 15, weight: .semibold))
                         }
                         .foregroundColor(.white)
@@ -235,8 +235,8 @@ struct ReadingChatView: View {
         } message: {
             Text("This will save a summary of your conversation to inform future readings.")
         }
-        .sheet(isPresented: $showingCreditsSheet) {
-            CreditsSheetView(accentColor: accentColor)
+        .sheet(isPresented: $showingMessagesSheet) {
+            MessagesSheetView(accentColor: accentColor)
         }
     }
     
@@ -272,7 +272,7 @@ struct ReadingChatView: View {
                         .font(.system(size: 11))
                         .foregroundColor(.white.opacity(0.4))
                 } else {
-                    Text("\(conversationManager.remainingMessages) credits")
+                    Text("\(conversationManager.remainingMessages) messages")
                         .font(.system(size: 11))
                         .foregroundColor(.white.opacity(0.4))
                 }
@@ -642,15 +642,15 @@ struct TypingIndicator: View {
     }
 }
 
-// MARK: - Credits Sheet
+// MARK: - Messages Sheet
 
-struct CreditsSheetView: View {
+struct MessagesSheetView: View {
     let accentColor: Color
     
     @Environment(\.dismiss) private var dismiss
     @StateObject private var conversationManager = ConversationManager.shared
     @State private var isPurchasing: Bool = false
-    @State private var purchasedPackage: CreditPackage?
+    @State private var purchasedPackage: MessagePackage?
     
     var body: some View {
         NavigationView {
@@ -664,7 +664,7 @@ struct CreditsSheetView: View {
                         // Current balance
                         VStack(spacing: 8) {
                             HStack(spacing: 8) {
-                                Image(systemName: "sparkles")
+                                Image(systemName: "bubble.left.and.bubble.right")
                                     .font(.system(size: 24))
                                     .foregroundColor(accentColor)
                                 Text("\(conversationManager.remainingMessages)")
@@ -672,7 +672,7 @@ struct CreditsSheetView: View {
                                     .foregroundColor(.white)
                             }
                             
-                            Text("credits remaining")
+                            Text("messages remaining")
                                 .font(.system(size: 14))
                                 .foregroundColor(.white.opacity(0.5))
                         }
@@ -680,8 +680,8 @@ struct CreditsSheetView: View {
                         
                         // Package options
                         VStack(spacing: 12) {
-                            ForEach(CreditPackage.allCases) { package in
-                                CreditPackageCard(
+                            ForEach(MessagePackage.allCases) { package in
+                                MessagePackageCard(
                                     package: package,
                                     accentColor: accentColor,
                                     isPurchasing: isPurchasing,
@@ -696,7 +696,7 @@ struct CreditsSheetView: View {
                             HStack(spacing: 8) {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundColor(.green)
-                                Text("\(purchased.credits) credits added!")
+                                Text("\(purchased.messageCount) messages added!")
                                     .font(.system(size: 14, weight: .medium))
                                     .foregroundColor(.white)
                             }
@@ -710,7 +710,7 @@ struct CreditsSheetView: View {
                         }
                         
                         // Info text
-                        Text("Each message you send uses 1 credit.\nCredits never expire.")
+                        Text("Each message you send uses 1 from your balance.\nMessages never expire.")
                             .font(.system(size: 12))
                             .foregroundColor(.white.opacity(0.4))
                             .multilineTextAlignment(.center)
@@ -720,7 +720,7 @@ struct CreditsSheetView: View {
                     }
                 }
             }
-            .navigationTitle("Get Credits")
+            .navigationTitle("Get Messages")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -733,7 +733,7 @@ struct CreditsSheetView: View {
         .presentationDragIndicator(.visible)
     }
     
-    private func purchasePackage(_ package: CreditPackage) {
+    private func purchasePackage(_ package: MessagePackage) {
         isPurchasing = true
         purchasedPackage = nil
         
@@ -762,20 +762,20 @@ struct CreditsSheetView: View {
     }
 }
 
-// MARK: - Credit Package Card
+// MARK: - Message Package Card
 
-struct CreditPackageCard: View {
-    let package: CreditPackage
+struct MessagePackageCard: View {
+    let package: MessagePackage
     let accentColor: Color
     let isPurchasing: Bool
     let onPurchase: () -> Void
     
     var body: some View {
         HStack(spacing: 16) {
-            // Credits info
+            // Message info
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Image(systemName: "sparkles")
+                    Image(systemName: "bubble.left.and.bubble.right")
                         .font(.system(size: 14))
                         .foregroundColor(accentColor)
                     Text(package.title)
